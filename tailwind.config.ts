@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        base: 'var(--base)',
+        // No color named `base`: it would override the `text-base` font-size utility with `color: var(--base)`.
         surface: 'var(--surface)',
         card: 'var(--card)',
         'card-hover': 'var(--card-hover)',
