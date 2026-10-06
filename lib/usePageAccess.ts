@@ -10,9 +10,16 @@ export function usePageAccess() {
 
   useEffect(() => {
     let cancelled = false;
+    // The login page is rendered inside the same root layout; checking the
+    // session there would 401 and redirect to /login again forever.
+    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+      setLoading(false);
+      return;
+    }
     fetch('/api/auth/me')
       .then(async (res) => {
         if (res.status === 401) {
+          if (window.location.pathname === '/login') return;
           const next = `${window.location.pathname}${window.location.search}`;
           window.location.href = `/login?next=${encodeURIComponent(next)}`;
           return;

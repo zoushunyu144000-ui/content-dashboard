@@ -10,8 +10,12 @@ export class ApiError extends Error {
 export async function api<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
   if (response.status === 401 && typeof window !== 'undefined') {
-    const next = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/login?next=${encodeURIComponent(next)}`;
+    // Never bounce from the login page itself (that caused an infinite
+    // /login?next=/login?next=... loop when a layout-level call got 401).
+    if (window.location.pathname !== '/login') {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.href = `/login?next=${encodeURIComponent(next)}`;
+    }
     throw new ApiError('Sign in required', 401);
   }
   const data = await response.json().catch(() => ({} as { error?: unknown }));
