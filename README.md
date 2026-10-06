@@ -8,7 +8,7 @@ This is not the old multi-product content dashboard. Publishing, calendars, Driv
 
 - **Next.js 14** app (`app/`, `components/`) talks only to its own HTTP API.
 - **Postgres 16** holds projects, runs, videos, analyses, clusters, and ideas. Schema is applied on boot.
-- **Built-in login** uses a signed `ci_session` cookie. There is no Supabase Auth.
+- **Built-in auth** uses a signed `ci_session` cookie. There is no Supabase Auth. `AUTH_MODE=open` (default) auto-issues the admin session so the password form is skipped; set `AUTH_MODE=password` to restore email/password login.
 - A **worker** inside the app process calls `POST /api/internal/research-tick` with `WORKER_SECRET`. Each tick advances one research step.
 - **Scrapers**, in order: Apify TikTok, then TikHub TikTok when that fallback is enabled or the run starts there, then YouTube Shorts via yt-dlp. The run stores `scraper_provider` and, when it degrades, `scraper_note`.
 - **AI** is an OpenAI-compatible HTTP API (`AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`). Keyword expansion, video analysis, insight merge, and content ideas all go through it. Video analysis reads `videos.transcript` when a subtitle download succeeded.
@@ -30,6 +30,7 @@ Runtime:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `ADMIN_RESET_PASSWORD`
+- `AUTH_MODE` (`open` | `password`)
 - `SESSION_SECRET`
 - `WORKER_SECRET`
 - `AI_PROVIDER`
@@ -70,6 +71,9 @@ docker compose up -d --build
 
 Postgres data and backups use the named volumes `content-intel-pgdata` and `content-intel-backups`.
 
-## Login
+## Auth
 
-On boot the app creates the admin user from the runtime values of `ADMIN_EMAIL` and `ADMIN_PASSWORD` when that email is missing. Sign in at `/login` with those credentials. Set `ADMIN_RESET_PASSWORD` to force a password overwrite on the next boot, then turn it off.
+On boot the app creates the admin user from the runtime values of `ADMIN_EMAIL` and `ADMIN_PASSWORD` when that email is missing.
+
+- `AUTH_MODE=open` (default for V0.1): any page or protected API silently issues a `ci_session` for `ADMIN_EMAIL`. `/login` redirects to `/`. Logout is hidden (a cleared cookie is re-issued on the next request). Password hash and `LOGIN.txt` stay intact for later.
+- `AUTH_MODE=password`: restore the email/password form at `/login`. Set `ADMIN_RESET_PASSWORD` to force a password overwrite on the next boot, then turn it off.

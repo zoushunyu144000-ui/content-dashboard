@@ -26,12 +26,13 @@ const NAV = [
 
 interface SidebarProps {
   userEmail?: string;
+  authMode?: 'open' | 'password';
   open?: boolean;
   overlay?: boolean;
   onNavigate?: () => void;
 }
 
-export default function Sidebar({ userEmail = '', open = false, overlay = false, onNavigate }: SidebarProps) {
+export default function Sidebar({ userEmail = '', authMode = 'open', open = false, overlay = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const search = useSearchParams();
   const { project } = useProject();
@@ -98,9 +99,11 @@ export default function Sidebar({ userEmail = '', open = false, overlay = false,
         <div className="truncate text-[12px]" style={{ color: 'var(--text-secondary)' }} title={userEmail}>
           {userEmail || t('nav.signedIn')}
         </div>
-        <button type="button" onClick={handleLogout} className="mt-2 text-[12px] text-muted hover:text-cream">
-          {t('nav.signOut')}
-        </button>
+        {authMode === 'password' ? (
+          <button type="button" onClick={handleLogout} className="mt-2 text-[12px] text-muted hover:text-cream">
+            {t('nav.signOut')}
+          </button>
+        ) : null}
       </div>
     </nav>
   );

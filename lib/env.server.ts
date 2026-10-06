@@ -28,6 +28,7 @@ export function getServerEnv() {
     adminEmail: str('ADMIN_EMAIL')?.toLowerCase(),
     adminPassword: process.env.ADMIN_PASSWORD?.trim() || undefined,
     adminResetPassword: flag('ADMIN_RESET_PASSWORD'),
+    authMode: ((str('AUTH_MODE') || 'open').toLowerCase() === 'password' ? 'password' : 'open') as 'open' | 'password',
     sessionSecret: str('SESSION_SECRET'),
     workerSecret: str('WORKER_SECRET'),
     aiBaseUrl: str('AI_BASE_URL'),

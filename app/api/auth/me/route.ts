@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
+import { getAuthMode } from '@/lib/auth/mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,5 +11,6 @@ export async function GET() {
     id: auth.user.id,
     email: auth.user.email,
     role: auth.user.role,
+    authMode: getAuthMode(),
   });
 }

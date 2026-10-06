@@ -12,7 +12,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
   const isFeed = pathname === '/feed';
-  const { userEmail } = usePageAccess();
+  const { userEmail, authMode } = usePageAccess();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         />
       ) : null}
       <Suspense fallback={null}>
-        <Sidebar userEmail={userEmail} open={open} overlay={isFeed} onNavigate={() => setOpen(false)} />
+        <Sidebar userEmail={userEmail} authMode={authMode} open={open} overlay={isFeed} onNavigate={() => setOpen(false)} />
       </Suspense>
       {!isFeed ? (
         <div className="shell-offset">

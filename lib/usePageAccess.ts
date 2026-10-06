@@ -7,6 +7,7 @@ export function usePageAccess() {
   const [role, setRole] = useState<'admin' | 'member'>('admin');
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [authMode, setAuthMode] = useState<'open' | 'password'>('open');
 
   useEffect(() => {
     let cancelled = false;
@@ -25,12 +26,13 @@ export function usePageAccess() {
           return;
         }
         if (!res.ok) return;
-        const data = await res.json() as { email?: string; role?: string };
+        const data = await res.json() as { email?: string; role?: string; authMode?: string };
         if (cancelled) return;
         const email = data.email || '';
         setUserEmail(email);
         setUserName(email.split('@')[0] || '');
         setRole(data.role === 'member' ? 'member' : 'admin');
+        setAuthMode(data.authMode === 'password' ? 'password' : 'open');
       })
       .catch(() => {})
       .finally(() => {
@@ -41,5 +43,5 @@ export function usePageAccess() {
     };
   }, []);
 
-  return { allowed: true, loading, role, userName, userEmail };
+  return { allowed: true, loading, role, userName, userEmail, authMode };
 }
