@@ -22,7 +22,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     if (!runs[0]) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
     const videos = sort === 'recent'
       ? await sql`
-          select v.id, v.platform, v.platform_video_id, v.url, v.canonical_url, v.embed_url, v.thumbnail_url,
+          select v.id, v.platform, v.platform_video_id, v.url, v.canonical_url, v.video_url, v.video_url_expires_at,
+                 v.embed_url, v.thumbnail_url,
                  v.caption, v.author_handle, v.author_name, v.author_followers, v.views, v.likes, v.comments,
                  v.shares, v.saves, v.duration_seconds, v.published_at, v.transcript,
                  rv.engagement_score, rv.outlier_score, rv.freshness_score, rv.viral_score,
@@ -39,7 +40,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
           limit ${limit}
         `
       : await sql`
-          select v.id, v.platform, v.platform_video_id, v.url, v.canonical_url, v.embed_url, v.thumbnail_url,
+          select v.id, v.platform, v.platform_video_id, v.url, v.canonical_url, v.video_url, v.video_url_expires_at,
+                 v.embed_url, v.thumbnail_url,
                  v.caption, v.author_handle, v.author_name, v.author_followers, v.views, v.likes, v.comments,
                  v.shares, v.saves, v.duration_seconds, v.published_at, v.transcript,
                  rv.engagement_score, rv.outlier_score, rv.freshness_score, rv.viral_score,
