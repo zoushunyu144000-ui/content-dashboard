@@ -59,26 +59,32 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-muted">{t('login.subtitle')}</p>
         </div>
         <form onSubmit={handleLogin} className="panel space-y-3 p-5">
-          <input
-            type="email"
-            name="email"
-            autoComplete="username"
-            placeholder={t('login.email')}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            className="field"
-          />
-          <input
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            placeholder={t('login.password')}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            className="field"
-          />
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted">{t('login.email')}</span>
+            <input
+              type="email"
+              name="email"
+              autoComplete="username"
+              placeholder={t('login.email')}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              className="field"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-muted">{t('login.password')}</span>
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              placeholder={t('login.password')}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              className="field"
+            />
+          </label>
           {error ? <p className="text-sm text-red">{error}</p> : null}
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? t('login.submitting') : t('login.submit')}
