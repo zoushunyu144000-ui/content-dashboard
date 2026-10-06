@@ -187,9 +187,10 @@
 .stat-box-value {
   margin-top: 6px;
   font-family: var(--font-mono), monospace;
-  font-size: 1.5rem;
+  font-size: clamp(0.95rem, 3.4vw, 1.5rem);
   letter-spacing: -0.03em;
-  line-height: 1.1;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .progress-track {
