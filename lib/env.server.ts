@@ -48,5 +48,6 @@ export function getServerEnv() {
     tikhubResultsPerRequest: Math.max(1, int('TIKHUB_RESULTS_PER_REQUEST', 20)),
     tikhubRegion: str('TIKHUB_REGION') || 'US',
     tikhubAutoFallback: flag('TIKHUB_AUTO_FALLBACK'),
+    youtubeProviderEnabled: flag('YOUTUBE_PROVIDER_ENABLED'),
   };
 }

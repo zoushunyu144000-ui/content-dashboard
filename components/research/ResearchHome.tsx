@@ -45,6 +45,7 @@ export default function ResearchHome() {
   const [busy, setBusy] = useState(false);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [pollKey, setPollKey] = useState(0);
+  const [youtubeEnabled, setYoutubeEnabled] = useState(false);
 
   const selectRun = useCallback((id: string) => {
     setRunId(id);
@@ -63,11 +64,12 @@ export default function ResearchHome() {
     }
     let cancelled = false;
     setLoadingRuns(true);
-    api<{ runs: RunListItem[] }>(`/api/research/runs?projectId=${encodeURIComponent(project.id)}`)
+    api<{ runs: RunListItem[]; youtube_provider_enabled?: boolean }>(`/api/research/runs?projectId=${encodeURIComponent(project.id)}`)
       .then((data) => {
         if (cancelled) return;
         const list = data.runs || [];
         setRuns(list);
+        setYoutubeEnabled(data.youtube_provider_enabled === true);
         const requested = new URLSearchParams(window.location.search).get('run') || '';
         setRunId(requested && list.some((item) => item.id === requested) ? requested : '');
       })
@@ -157,6 +159,11 @@ export default function ResearchHome() {
   }
 
   const projectQuery = project ? `project=${encodeURIComponent(project.id)}` : '';
+  const platforms = PLATFORMS.map((item) => (
+    item.id === 'shorts' && !youtubeEnabled
+      ? { ...item, label: 'YouTube Shorts (unavailable on this server)', enabled: false, reason: '' }
+      : { ...item, reason: item.enabled ? '' : 'coming soon' }
+  ));
 
   return (
     <div className="space-y-6">
@@ -195,10 +202,10 @@ export default function ResearchHome() {
         <fieldset>
           <legend className="mb-2 text-sm text-muted">Platform</legend>
           <div className="grid grid-cols-2 gap-2">
-            {PLATFORMS.map((item) => (
+            {platforms.map((item) => (
               <label
                 key={item.id}
-                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${item.enabled ? '' : 'opacity-50'}`}
+                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${item.id === 'shorts' && !youtubeEnabled ? 'col-span-2' : ''} ${item.enabled ? '' : 'opacity-60'}`}
                 style={{ borderColor: 'var(--border)' }}
               >
                 <span className="flex items-center gap-2">
@@ -212,7 +219,7 @@ export default function ResearchHome() {
                   />
                   {item.label}
                 </span>
-                {item.enabled ? null : <span className="text-[11px] text-muted">coming soon</span>}
+                {item.reason ? <span className="text-[11px] text-muted">{item.reason}</span> : null}
               </label>
             ))}
           </div>

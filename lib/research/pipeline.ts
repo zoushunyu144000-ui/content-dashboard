@@ -245,6 +245,10 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
     config.providerIndex = 0;
     config.scrapeStartedAt = new Date().toISOString();
   }
+  if (!getServerEnv().youtubeProviderEnabled) {
+    config.providerChain = config.providerChain.filter((name) => name !== 'youtube');
+    if (config.providerChain.length === 0) config.providerChain = providerChain('apify');
+  }
   const index = config.providerIndex ?? 0;
   const providerName = config.providerChain[index];
   if (!providerName) return failRun(sql, run, 'No scraper provider is available');
@@ -274,7 +278,13 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
   }
   if (tasks.length === 0) return fallback(sql, run, config, `${providerName} had no keywords to search`);
 
-  const provider = getScraperProvider(providerName);
+  let provider;
+  try {
+    provider = getScraperProvider(providerName);
+  } catch (err) {
+    if (err instanceof ScraperUnavailableError) return fallback(sql, run, config, err.message);
+    throw err;
+  }
   for (const task of tasks) {
     if (task.status !== 'running' || !task.external_run_id) continue;
     try {
@@ -448,7 +458,13 @@ async function normalize(sql: Sql, run: RunRow): Promise<string> {
   for (const task of tasks) {
     if (task.raw_meta?.normalized === true) continue;
     if (!isConcrete(task.scraper_provider)) continue;
-    const provider = getScraperProvider(task.scraper_provider);
+    let provider;
+    try {
+      provider = getScraperProvider(task.scraper_provider);
+    } catch (err) {
+      if (err instanceof ScraperUnavailableError) continue;
+      throw err;
+    }
     const videos = await provider.fetchNormalized(toHandle(task));
     // Scoring (and therefore viral rank) runs after this step, so the
     // "top viral AI_ANALYSIS_LIMIT" slice is not knowable yet. Download every

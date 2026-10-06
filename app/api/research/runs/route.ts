@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
 import { getDb } from '@/lib/db';
+import { getServerEnv } from '@/lib/env.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,10 @@ export async function GET(request: Request) {
           order by created_at desc
           limit 50
         `;
-    return NextResponse.json({ runs });
+    return NextResponse.json({
+      runs,
+      youtube_provider_enabled: getServerEnv().youtubeProviderEnabled,
+    });
   } catch (err) {
     console.error('[runs] list failed', err);
     return NextResponse.json({ error: 'Could not load research runs' }, { status: 500 });
@@ -54,6 +58,9 @@ export async function POST(request: Request) {
   if (!topic) return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
   const requested = typeof body.scraperProvider === 'string' ? body.scraperProvider : '';
   const scraperProvider = PROVIDERS.has(requested) ? requested : undefined;
+  if (scraperProvider === 'youtube' && !getServerEnv().youtubeProviderEnabled) {
+    return NextResponse.json({ error: 'YouTube Shorts is unavailable on this server' }, { status: 400 });
+  }
   try {
     const sql = getDb();
     const active = await sql<{ id: string; status: string }[]>`
