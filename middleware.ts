@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
 
   if (pathname === '/login') {
     if (session) {
-      return relativeRedirect('/');
+      return publicRedirect(request, '/');
     }
     return NextResponse.next();
   }
@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   if (!session) {
     const next = `${pathname}${search || ''}`;
     const target = next && next !== '/' ? `/login?next=${encodeURIComponent(next)}` : '/login';
-    return relativeRedirect(target);
+    return publicRedirect(request, target);
   }
 
   return NextResponse.next();
@@ -30,11 +30,20 @@ export async function middleware(request: NextRequest) {
 
 /**
  * Behind Cloudflare Tunnel + HOSTNAME=127.0.0.1, request.url resolves to
- * localhost:3100, so absolute redirects would send phones to localhost.
- * A relative Location header is valid (RFC 7231) and keeps the public host.
+ * localhost:3100, so redirects built from it would send phones to localhost.
+ * Next requires an absolute Location, so rebuild the public origin from the
+ * Host / X-Forwarded-* / CF-Visitor headers the tunnel forwards.
  */
-function relativeRedirect(location: string) {
-  return new NextResponse(null, { status: 307, headers: { Location: location } });
+function publicRedirect(request: NextRequest, path: string) {
+  const h = request.headers;
+  const host = (h.get('x-forwarded-host') || h.get('host') || request.nextUrl.host).split(',')[0].trim();
+  let proto = (h.get('x-forwarded-proto') || '').split(',')[0].trim();
+  if (!proto) {
+    const visitor = h.get('cf-visitor');
+    if (visitor && visitor.includes('"https"')) proto = 'https';
+  }
+  if (!proto) proto = request.nextUrl.protocol.replace(':', '') || 'http';
+  return NextResponse.redirect(new URL(path, `${proto}://${host}`), 307);
 }
 
 export const config = {
