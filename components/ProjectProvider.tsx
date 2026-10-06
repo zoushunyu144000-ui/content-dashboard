@@ -33,8 +33,18 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    api<{ projects: ProjectOption[] }>('/api/projects')
-      .then((data) => {
+    const loadRunProject = async (): Promise<string | null> => {
+      const runId = new URLSearchParams(window.location.search).get('run');
+      if (!runId) return null;
+      try {
+        const data = await api<{ run: { project_id?: string } }>(`/api/research/runs/${encodeURIComponent(runId)}`);
+        return data.run?.project_id || null;
+      } catch {
+        return null;
+      }
+    };
+    Promise.all([api<{ projects: ProjectOption[] }>('/api/projects'), loadRunProject()])
+      .then(([data, runProjectId]) => {
         if (cancelled) return;
         const list = data.projects || [];
         setProjects(list);
@@ -45,13 +55,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           list.find((item) => item.slug === DEFAULT_SLUG) ||
           list.find((item) => item.name === 'LOGOS Web Studio') ||
           null;
-        // URL wins. With no ?project=, Dashboard and Research start on LOGOS.
-        // localStorage is the fallback when that project is missing, and it
-        // remembers the last explicit choice for the next visit.
+        // A ?run= link always opens that run's project. Otherwise ?project= wins,
+        // then the last explicit choice (localStorage), then LOGOS by default.
         const chosen =
+          list.find((item) => item.id === runProjectId) ||
           list.find((item) => item.id === fromUrl) ||
-          logos ||
           list.find((item) => item.id === stored) ||
+          logos ||
           list[0] ||
           null;
         if (!chosen) return;
