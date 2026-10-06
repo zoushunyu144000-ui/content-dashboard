@@ -24,7 +24,7 @@ export default function GlobalFeatures() {
       const target = NAV_MAP[e.key];
       if (!target || pathname === target) return;
       e.preventDefault();
-      window.location.href = target;
+      window.location.href = `${target}${window.location.search}`;
     }
 
     document.addEventListener('keydown', handleKeyDown);

@@ -12,6 +12,11 @@ export function usePageAccess() {
     let cancelled = false;
     fetch('/api/auth/me')
       .then(async (res) => {
+        if (res.status === 401) {
+          const next = `${window.location.pathname}${window.location.search}`;
+          window.location.href = `/login?next=${encodeURIComponent(next)}`;
+          return;
+        }
         if (!res.ok) return;
         const data = await res.json() as { email?: string; role?: string };
         if (cancelled) return;

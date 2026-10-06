@@ -1,47 +1,71 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
+import { ProjectProvider } from './ProjectProvider';
 import { usePageAccess } from '@/lib/usePageAccess';
+import { BRAND } from '@/lib/brand';
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const { role, userName, userEmail } = usePageAccess();
+  const isFeed = pathname === '/feed';
+  const { userEmail } = usePageAccess();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  if (isLoginPage) {
-    return <>{children}</>;
-  }
+  if (isLoginPage) return <>{children}</>;
 
   return (
-    <>
-      <button
-        type="button"
-        className="md:hidden fixed top-3 left-3 z-[60] rounded-lg px-3 py-2 text-xs font-semibold"
-        style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-        onClick={() => setOpen((value) => !value)}
-        aria-label={open ? 'Close menu' : 'Open menu'}
-      >
-        Menu
-      </button>
+    <ProjectProvider>
+      {isFeed ? (
+        <button
+          type="button"
+          className="menu-button fixed left-3 top-3 z-[70]"
+          onClick={() => setOpen((value) => !value)}
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+        >
+          {open ? 'Close' : 'Menu'}
+        </button>
+      ) : (
+        <header className="shell-top md:hidden">
+          <button
+            type="button"
+            className="menu-button"
+            onClick={() => setOpen((value) => !value)}
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
+          >
+            {open ? 'Close' : 'Menu'}
+          </button>
+          <span className="truncate text-[13px] font-medium">{BRAND.name}</span>
+        </header>
+      )}
       {open ? (
         <button
           type="button"
           aria-label="Close menu"
-          className="md:hidden fixed inset-0 z-40 bg-black/50"
+          className="fixed inset-0 z-40 bg-black/60"
           onClick={() => setOpen(false)}
         />
       ) : null}
-      <Sidebar role={role} userName={userName} userEmail={userEmail} open={open} onNavigate={() => setOpen(false)} />
-      <main className="min-h-screen p-4 pt-16 md:ml-[250px] md:p-8 relative z-[1]">
-        {children}
-      </main>
-    </>
+      <Suspense fallback={null}>
+        <Sidebar userEmail={userEmail} open={open} overlay={isFeed} onNavigate={() => setOpen(false)} />
+      </Suspense>
+      {!isFeed ? (
+        <div className="shell-offset">
+          <main className="mx-auto min-h-dvh w-full max-w-6xl px-4 py-4 md:px-8 md:py-8">
+            {children}
+          </main>
+        </div>
+      ) : (
+        <main className="h-dvh overflow-hidden">{children}</main>
+      )}
+    </ProjectProvider>
   );
 }

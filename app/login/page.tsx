@@ -4,8 +4,20 @@ import { useState } from 'react';
 import { BRAND } from '@/lib/brand';
 
 function safeNext(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
-  return value;
+  if (!value) return '/';
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/';
+  if (/[\s\\]/.test(trimmed) || trimmed.includes('://')) return '/';
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    return '/';
+  }
+  if (!decoded.startsWith('/') || decoded.startsWith('//') || decoded.includes('\\') || decoded.includes('://')) {
+    return '/';
+  }
+  return trimmed;
 }
 
 export default function LoginPage() {
@@ -14,73 +26,63 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleLogin(event: React.FormEvent) {
+    event.preventDefault();
     setLoading(true);
     setError('');
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(typeof data.error === 'string' ? data.error : 'Could not sign in');
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(typeof data.error === 'string' ? data.error : 'Could not sign in');
+        setLoading(false);
+        return;
+      }
+      const next = safeNext(new URLSearchParams(window.location.search).get('next'));
+      window.location.href = next;
+    } catch {
+      setError('Could not sign in');
       setLoading(false);
-      return;
     }
-    const next = safeNext(new URLSearchParams(window.location.search).get('next'));
-    window.location.href = next;
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 px-4" style={{ background: '#0a0a0f' }}>
+    <div className="flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-[380px]">
-        <div className="flex flex-col items-center mb-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-dark.png" alt={BRAND.name} className="h-12 w-auto mb-4" />
-          <h1 className="font-heading text-xl" style={{ color: 'var(--text-primary)' }}>{BRAND.name}</h1>
-          <p className="mt-2 text-sm text-center" style={{ color: 'var(--text-muted)' }}>
-            Sign in to continue
-          </p>
+        <div className="mb-8">
+          <h1 className="font-heading text-xl">{BRAND.name}</h1>
+          <p className="mt-2 text-sm text-muted">Sign in to the research desk.</p>
         </div>
-        <div className="rounded-2xl p-5 sm:p-6" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-          <form onSubmit={handleLogin} className="space-y-3">
-            <input
-              type="email"
-              name="email"
-              autoComplete="username"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full rounded-xl px-4 py-3 text-base outline-none"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-            />
-            <input
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full rounded-xl px-4 py-3 text-base outline-none"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-            />
-            {error ? (
-              <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl py-3 text-sm font-semibold text-white disabled:opacity-60"
-              style={{ background: 'var(--accent)' }}
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-        </div>
+        <form onSubmit={handleLogin} className="panel space-y-3 p-5">
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            placeholder="Email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            className="field"
+          />
+          <input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            className="field"
+          />
+          {error ? <p className="text-sm text-red">{error}</p> : null}
+          <button type="submit" disabled={loading} className="btn-primary w-full">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
       </div>
     </div>
   );

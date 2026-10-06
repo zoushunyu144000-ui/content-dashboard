@@ -30,7 +30,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: BRAND.name,
-  description: `Content performance dashboard for ${BRAND.name}`,
+  description: `${BRAND.name} research dashboard`,
 };
 
 export default function RootLayout({
