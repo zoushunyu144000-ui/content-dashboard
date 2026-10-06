@@ -148,6 +148,29 @@ export default function ResearchHome() {
     }
   }
 
+  async function retry(failedTopic: string) {
+    if (!project || !failedTopic.trim()) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const data = await api<{ id: string; status: string; existing?: boolean }>('/api/research/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, topic: failedTopic.trim() }),
+      });
+      if (data.existing) setNotice('A research run is already in progress for this project.');
+      const list = await api<{ runs: RunListItem[] }>(`/api/research/runs?projectId=${encodeURIComponent(project.id)}`);
+      setRuns(list.runs || []);
+      selectRun(data.id);
+      setPollKey((value) => value + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not retry this run');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancel(id: string) {
     setError('');
     try {
@@ -233,6 +256,12 @@ export default function ResearchHome() {
         <p className="text-sm text-muted">{loadingRuns ? 'Loading runs…' : 'Start a topic, or pick a run below, to watch the pipeline.'}</p>
       )}
 
+      {run?.status === 'failed' ? (
+        <button type="button" className="btn-primary" disabled={busy || !project} onClick={() => retry(run.topic)}>
+          {busy ? 'Starting…' : 'Retry'}
+        </button>
+      ) : null}
+
       {run?.status === 'completed' && project ? (
         <div className="flex flex-wrap gap-2">
           <Link className="btn-primary" href={`/feed?${projectQuery}&run=${encodeURIComponent(run.id)}`}>Open Feed</Link>
@@ -267,6 +296,7 @@ export default function ResearchHome() {
               <span className="text-xs text-muted">{stepLabel(item.status)} · {item.progress ?? 0}%</span>
             </div>
             <p className="provider-label mt-1">{providerLabel(item.scraper_provider)} · {formatTime(item.created_at)}</p>
+            {item.status === 'failed' && item.error_message ? <p className="error-banner mt-2">{item.error_message}</p> : null}
             <div className="mt-2"><ScraperNote note={item.scraper_note} /></div>
           </article>
         ))}
