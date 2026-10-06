@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import MetricPill from './MetricPill';
 import ScoreBadge from './ScoreBadge';
-import { humanize, providerLabel } from '@/lib/client/format';
+import { formatCount, humanize, providerLabel } from '@/lib/client/format';
 import { isOffTopic } from '@/lib/research/relevance';
 
 export interface FeedVideo {
@@ -125,34 +125,10 @@ function SlideMedia({ video, mountEmbed, active }: { video: FeedVideo; mountEmbe
   );
 }
 
-function Analysis({ video, provider }: { video: FeedVideo; provider: string | null }) {
+function AnalysisDetails({ video }: { video: FeedVideo }) {
   const [open, setOpen] = useState(false);
-  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || 'Unknown author');
   return (
     <div className="space-y-4 break-words">
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-semibold">{handle}</div>
-            {video.author_name && video.author_handle ? (
-              <div className="text-xs text-muted">{video.author_name}</div>
-            ) : null}
-          </div>
-          <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
-        </div>
-        {isOffTopic(video.relevance) ? <div className="mt-2"><span className="off-topic-chip">Off-topic</span></div> : null}
-        <div className="mt-2">
-          <MetricPill label="Followers" value={video.author_followers} />
-        </div>
-        <p className="provider-label mt-2">{providerLabel(provider)}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <MetricPill label="Views" value={video.views} />
-        <MetricPill label="Likes" value={video.likes} />
-        <MetricPill label="Comments" value={video.comments} />
-        <MetricPill label="Shares" value={video.shares} />
-        <MetricPill label="Saves" value={video.saves} />
-      </div>
       {video.caption ? <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{video.caption}</p> : null}
       <dl className="space-y-2 text-sm">
         <div>
@@ -191,6 +167,38 @@ function Analysis({ video, provider }: { video: FeedVideo; provider: string | nu
       ) : (
         <p className="text-xs text-muted">No original URL</p>
       )}
+    </div>
+  );
+}
+
+function Analysis({ video, provider }: { video: FeedVideo; provider: string | null }) {
+  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || 'Unknown author');
+  return (
+    <div className="space-y-4 break-words">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold">{handle}</div>
+            {video.author_name && video.author_handle ? (
+              <div className="text-xs text-muted">{video.author_name}</div>
+            ) : null}
+          </div>
+          <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
+        </div>
+        {isOffTopic(video.relevance) ? <div className="mt-2"><span className="off-topic-chip">Off-topic</span></div> : null}
+        <div className="mt-2">
+          <MetricPill label="Followers" value={video.author_followers} />
+        </div>
+        <p className="provider-label mt-2">{providerLabel(provider)}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <MetricPill label="Views" value={video.views} />
+        <MetricPill label="Likes" value={video.likes} />
+        <MetricPill label="Comments" value={video.comments} />
+        <MetricPill label="Shares" value={video.shares} />
+        <MetricPill label="Saves" value={video.saves} />
+      </div>
+      <AnalysisDetails video={video} />
     </div>
   );
 }
@@ -282,8 +290,8 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
       {videos.map((video, videoIndex) => {
         const mountEmbed = Math.abs(videoIndex - index) <= 1;
         return (
-          <section key={video.id} data-feed-index={videoIndex} className="feed-slide relative">
-            <div className="absolute inset-0 md:grid md:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+          <section key={video.id} data-feed-index={videoIndex} className="feed-slide relative flex flex-col md:block">
+            <div className="relative min-h-0 w-full flex-1 md:absolute md:inset-0 md:grid md:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
               <div className="feed-stage">
                 <div className="feed-frame">
                   <SlideMedia video={video} mountEmbed={mountEmbed} active={videoIndex === index} />
@@ -304,7 +312,7 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
                 <Analysis video={video} provider={provider} />
               </aside>
             </div>
-            <MobileAnalysis video={video} provider={provider} countLabel={`${videoIndex + 1} / ${videos.length}`} />
+            <MobileChrome video={video} provider={provider} />
           </section>
         );
       })}
@@ -312,24 +320,41 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
   );
 }
 
-function MobileAnalysis({ video, provider, countLabel }: { video: FeedVideo; provider: string | null; countLabel: string }) {
+function MobileChrome({ video, provider }: { video: FeedVideo; provider: string | null }) {
   const [open, setOpen] = useState(false);
+  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || 'Unknown author');
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 md:hidden">
-      <div className="mb-4 ml-3 flex items-center gap-2">
-        {isOffTopic(video.relevance) ? <span className="off-topic-chip">Off-topic</span> : null}
-        <button type="button" className="menu-button" onClick={() => setOpen((value) => !value)}>
-          {open ? 'Hide analysis' : 'Analysis'}
-        </button>
+    <div
+      className="shrink-0 border-t md:hidden"
+      style={{ background: 'var(--card)', borderColor: 'var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="space-y-1.5 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-sm font-semibold">
+            {handle}
+            <span className="font-normal text-muted"> · {formatCount(video.author_followers)}</span>
+          </p>
+          <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
+        </div>
+        <p className="text-[12px] leading-5">
+          <span className="text-muted">Views </span>{formatCount(video.views)}
+          <span className="text-muted"> · Likes </span>{formatCount(video.likes)}
+          <span className="text-muted"> · Comments </span>{formatCount(video.comments)}
+          <span className="text-muted"> · Shares </span>{formatCount(video.shares)}
+          <span className="text-muted"> · Saves </span>{formatCount(video.saves)}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {video.is_high_potential ? <span className="off-topic-chip" style={{ color: '#dfe3ff', borderColor: 'rgba(139, 147, 255, 0.5)', background: 'rgba(139, 147, 255, 0.16)' }}>High Potential</span> : null}
+          {isOffTopic(video.relevance) ? <span className="off-topic-chip">Off-topic</span> : null}
+          <span className="provider-label">{providerLabel(provider)}</span>
+          <button type="button" className="menu-button ml-auto" onClick={() => setOpen((value) => !value)}>
+            {open ? 'Hide analysis' : 'Analysis'}
+          </button>
+        </div>
       </div>
       {open ? (
-        <div
-          data-feed-panel
-          className="max-h-[58vh] overflow-y-auto border-t px-4 py-3"
-          style={{ background: 'var(--card)', borderColor: 'var(--border)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}
-        >
-          <p className="mb-3 text-xs text-muted">{countLabel}</p>
-          <Analysis video={video} provider={provider} />
+        <div data-feed-panel className="max-h-[38vh] overflow-y-auto border-t px-3 py-3" style={{ borderColor: 'var(--border)' }}>
+          <AnalysisDetails video={video} />
         </div>
       ) : null}
     </div>
