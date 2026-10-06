@@ -8,6 +8,12 @@ export const dynamic = 'force-dynamic';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function metricOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const auth = await requireUser();
   if (auth instanceof NextResponse) return auth;
@@ -25,11 +31,26 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       where run_id = ${params.id}
       order by kind, video_count desc
     `;
-    const highPotential = await sql<{ n: number }[]>`
-      select count(*)::int as n
+    const highPotential = await sql<
+      {
+        id: string;
+        platform: string | null;
+        url: string | null;
+        thumbnail_url: string | null;
+        author_handle: string | null;
+        views: unknown;
+        likes: unknown;
+        viral_score: unknown;
+        is_high_potential: boolean | null;
+        hook: string | null;
+      }[]
+    >`
+      select v.id, v.platform, v.url, v.thumbnail_url, v.author_handle, v.views, v.likes,
+             rv.viral_score, rv.is_high_potential, a.hook
       from research_run_videos rv
+      join videos v on v.id = rv.video_id
       left join lateral (
-        select relevance
+        select hook, relevance
         from video_analyses
         where run_id = rv.run_id and video_id = rv.video_id and status = 'complete'
         order by created_at desc
@@ -38,6 +59,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       where rv.run_id = ${params.id}
         and rv.is_high_potential
         and (a.relevance is null or a.relevance >= ${RELEVANCE_MIN})
+      order by rv.viral_score desc nulls last
     `;
     const coverage = await sql<{ analyzed: number; on_topic: number }[]>`
       select
@@ -57,7 +79,18 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         video_count: asNumber(cluster.video_count),
         percent: asNumber(cluster.percent),
       })),
-      high_potential: Number(highPotential[0]?.n || 0),
+      high_potential: highPotential.map((video) => ({
+        id: video.id,
+        platform: video.platform,
+        url: video.url,
+        thumbnail_url: video.thumbnail_url,
+        author_handle: video.author_handle,
+        views: metricOrNull(video.views),
+        likes: metricOrNull(video.likes),
+        viral_score: metricOrNull(video.viral_score),
+        is_high_potential: Boolean(video.is_high_potential),
+        hook: video.hook,
+      })),
       analyzed: Number(coverage[0]?.analyzed || 0),
       on_topic: Number(coverage[0]?.on_topic || 0),
     });

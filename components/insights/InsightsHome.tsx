@@ -11,7 +11,6 @@ import { useToast } from '@/components/ToastProvider';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatCount, formatTime, providerLabel } from '@/lib/client/format';
-import { isOffTopic } from '@/lib/research/relevance';
 
 interface RunRow {
   id: string;
@@ -40,10 +39,21 @@ interface PackedItem {
 interface VideoRow extends InsightExample {
   views: number | null;
   viral_score: number | null;
-  is_high_potential: boolean | null;
   hook: string | null;
   analysis_status: string | null;
-  relevance?: number | null;
+}
+
+interface HighPotentialVideo {
+  id: string;
+  platform: string | null;
+  url: string | null;
+  thumbnail_url: string | null;
+  author_handle: string | null;
+  views: number | null;
+  likes: number | null;
+  viral_score: number | null;
+  is_high_potential: boolean;
+  hook: string | null;
 }
 
 const SECTIONS: Array<{ kind: string; key: string; title: string }> = [
@@ -64,6 +74,7 @@ export default function InsightsHome() {
   const [clusters, setClusters] = useState<ClusterRow[]>([]);
   const [packed, setPacked] = useState<Record<string, PackedItem[]>>({});
   const [videos, setVideos] = useState<VideoRow[]>([]);
+  const [highPotential, setHighPotential] = useState<HighPotentialVideo[]>([]);
   const [ideas, setIdeas] = useState<ContentIdea[]>([]);
   const [provider, setProvider] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -124,12 +135,14 @@ export default function InsightsHome() {
     setError('');
     setAnalyzedCount(null);
     setOnTopicCount(null);
+    setHighPotential([]);
     Promise.all([
       api<{
         run: { insights: Record<string, PackedItem[]> | null; scraper_provider: string | null; scraper_note: string | null; status: string };
         clusters: ClusterRow[];
         analyzed?: number;
         on_topic?: number;
+        high_potential?: HighPotentialVideo[];
       }>(
         `/api/research/runs/${runId}/insights`,
       ),
@@ -148,6 +161,7 @@ export default function InsightsHome() {
         setIdeas(ideaData.ideas || []);
         setAnalyzedCount(typeof insightData.analyzed === 'number' ? insightData.analyzed : null);
         setOnTopicCount(typeof insightData.on_topic === 'number' ? insightData.on_topic : null);
+        setHighPotential(Array.isArray(insightData.high_potential) ? insightData.high_potential : []);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message || 'Could not load insights');
@@ -162,7 +176,6 @@ export default function InsightsHome() {
 
   const selected = runs.find((run) => run.id === runId) || null;
   const analyzed = analyzedCount ?? videos.filter((video) => video.analysis_status === 'complete').length;
-  const highPotential = videos.filter((video) => video.is_high_potential && !isOffTopic(video.relevance));
 
   const sections = useMemo(() => {
     return SECTIONS.map((section) => {
@@ -310,8 +323,8 @@ export default function InsightsHome() {
               )}
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{video.author_handle ? `@${video.author_handle}` : 'Unknown author'}</span>
-                <span className="mt-1 block text-xs text-muted">Views {formatCount(video.views)}</span>
-                <span className="mt-2 block"><ScoreBadge score={video.viral_score} high /></span>
+                <span className="mt-1 block text-xs text-muted">Views {formatCount(video.views)} · Likes {formatCount(video.likes)}</span>
+                <span className="mt-2 block"><ScoreBadge score={video.viral_score} high={video.is_high_potential} /></span>
                 <span className="mt-2 block text-sm" style={{ color: 'var(--text-secondary)' }}>{video.hook || '—'}</span>
               </span>
             </Link>
