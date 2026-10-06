@@ -1,6 +1,6 @@
 import fs from 'fs';
-import { normalizeApifyTikTokItems } from '../lib/research/scraper/normalize/tiktok';
-import { normalizeTikHubSearch } from '../lib/research/scraper/normalize/tikhub';
+import { normalizeApifyTikTokItem, normalizeApifyTikTokItems } from '../lib/research/scraper/normalize/tiktok';
+import { normalizeTikHubAweme, normalizeTikHubSearch } from '../lib/research/scraper/normalize/tikhub';
 import { normalizeYouTubeFlatEntry } from '../lib/research/scraper/normalize/youtube';
 
 const apifyPath = '/workspace/content-intel/samples/apify-tiktok-web-design.json';
@@ -36,6 +36,29 @@ assert(!apify.some((video) => video.platformVideoId === 'bad'), 'errorCode item 
 const flat = apify.find((video) => video.platformVideoId === 'flat-1');
 assert(flat?.authorHandle === 'flat_author' && flat.views === 15 && flat.likes === 0, 'flat authorMeta keys and numeric strings work');
 assert(flat?.canonicalUrl?.includes('?') === false, 'flat canonical url strips the query');
+const englishFirst = normalizeApifyTikTokItem({
+  id: 'sub-en',
+  webVideoUrl: 'https://www.tiktok.com/@a/video/sub-en',
+  videoMeta: {
+    subtitleLinks: [
+      { language: 'spa-ES', downloadLink: 'https://cdn.example/es.vtt' },
+      { language: 'eng-US', downloadLink: 'https://cdn.example/en.vtt' },
+    ],
+  },
+});
+assert(englishFirst?.subtitleUrl === 'https://cdn.example/en.vtt', 'apify prefers eng-US downloadLink');
+assert(englishFirst?.transcript === null, 'apify subtitle link is fetched later');
+const firstTrack = normalizeApifyTikTokItem({
+  id: 'sub-first',
+  webVideoUrl: 'https://www.tiktok.com/@a/video/sub-first',
+  videoMeta: {
+    subtitleLinks: [
+      { language: 'fra-FR', downloadLink: 'https://cdn.example/fr.vtt' },
+      { language: 'deu-DE', downloadLink: 'https://cdn.example/de.vtt' },
+    ],
+  },
+});
+assert(firstTrack?.subtitleUrl === 'https://cdn.example/fr.vtt', 'apify falls back to the first subtitle link');
 
 const fixedNow = new Date('2026-10-07T00:00:00.000Z');
 const tikhubRaw = JSON.parse(fs.readFileSync(tikhubPath, 'utf8'));
@@ -57,6 +80,32 @@ assert(firstTik.publishedAt === new Date(1789650855 * 1000).toISOString(), 'tikh
 assert(firstTik.transcript === null, 'transcript is left for a later WebVTT fetch');
 const withCaptions = tikhub.filter((video) => video.subtitleUrl).length;
 assert(withCaptions === 9, 'nine TikHub items expose a caption url');
+const englishCaption = normalizeTikHubAweme({
+  aweme_id: '111',
+  author: { unique_id: 'a' },
+  video: {
+    cla_info: {
+      caption_infos: [
+        { lang: 'spa-ES', url: 'https://cdn.example/es.vtt' },
+        { lang: 'eng-US', url: 'https://cdn.example/en.vtt' },
+      ],
+    },
+  },
+}, fixedNow);
+assert(englishCaption?.subtitleUrl === 'https://cdn.example/en.vtt', 'tikhub prefers eng-US caption url');
+assert(englishCaption?.transcript === null, 'tikhub transcript stays null until the WebVTT download');
+const firstCaption = normalizeTikHubAweme({
+  aweme_id: '222',
+  video: {
+    cla_info: {
+      caption_infos: [
+        { lang: 'fra-FR', url: 'https://cdn.example/fr.vtt' },
+        { language_code: 'deu-DE', url: 'https://cdn.example/de.vtt' },
+      ],
+    },
+  },
+}, fixedNow);
+assert(firstCaption?.subtitleUrl === 'https://cdn.example/fr.vtt', 'tikhub falls back to the first caption url');
 
 const short = normalizeYouTubeFlatEntry({ id: 'abc123xyz01', title: 'Short', duration: 45, view_count: 1200, channel: 'Desk' });
 assert(short?.url === 'https://www.youtube.com/shorts/abc123xyz01', 'duration <= 60 uses shorts url');

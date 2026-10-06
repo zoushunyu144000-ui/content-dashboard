@@ -442,16 +442,16 @@ async function normalize(sql: Sql, run: RunRow): Promise<string> {
     where run_id = ${run.id} and status = 'succeeded'
     order by created_at
   `;
-  const budget = { left: 12_000 };
   for (const task of tasks) {
     if (task.raw_meta?.normalized === true) continue;
     if (!isConcrete(task.scraper_provider)) continue;
     const provider = getScraperProvider(task.scraper_provider);
     const videos = await provider.fetchNormalized(toHandle(task));
+    // Scoring (and therefore viral rank) runs after this step, so the
+    // "top viral AI_ANALYSIS_LIMIT" slice is not knowable yet. Download every
+    // subtitle URL instead. Failures stay null and are ignored.
+    await fillTranscripts(videos);
     for (const video of videos) {
-      if (!video.transcript && video.subtitleUrl) {
-        video.transcript = await fetchTranscript(video.subtitleUrl, budget);
-      }
       const videoId = await upsertVideo(sql, video);
       if (!videoId) continue;
       await sql`
@@ -479,12 +479,36 @@ async function normalize(sql: Sql, run: RunRow): Promise<string> {
   return 'scoring';
 }
 
-async function fetchTranscript(url: string, budget: { left: number }): Promise<string | null> {
-  if (budget.left <= 500) return null;
-  const timeout = Math.min(4000, budget.left);
-  const started = Date.now();
+const TRANSCRIPT_CONCURRENCY = 4;
+const TRANSCRIPT_TIMEOUT_MS = 8000;
+
+async function fillTranscripts(videos: NormalizedVideo[]): Promise<void> {
+  const pending = videos.filter((video) => !video.transcript && video.subtitleUrl);
+  await mapPool(pending, TRANSCRIPT_CONCURRENCY, async (video) => {
+    const url = video.subtitleUrl;
+    if (!url) return;
+    video.transcript = await fetchTranscript(url);
+  });
+}
+
+async function mapPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
+  if (items.length === 0) return;
+  let cursor = 0;
+  const runners = Math.min(concurrency, items.length);
+  async function run(): Promise<void> {
+    for (;;) {
+      const current = cursor;
+      cursor += 1;
+      if (current >= items.length) return;
+      await worker(items[current]);
+    }
+  }
+  await Promise.all(Array.from({ length: runners }, () => run()));
+}
+
+async function fetchTranscript(url: string): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => controller.abort(), TRANSCRIPT_TIMEOUT_MS);
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) return null;
@@ -494,7 +518,6 @@ async function fetchTranscript(url: string, budget: { left: number }): Promise<s
     return null;
   } finally {
     clearTimeout(timer);
-    budget.left -= Date.now() - started;
   }
 }
 

@@ -1,22 +1,12 @@
 import type { NormalizedVideo } from '../types';
+import { pickSubtitle } from '../subtitles';
 import { asNumber, asString, canonicalUrl, field, isoFromSeconds, isoFromUnknown } from './shared';
 
 function subtitleFrom(item: Record<string, unknown>): { transcript: string | null; subtitleUrl: string | null } {
   const direct = asString(field(item, 'transcript')) || asString(field(item, 'subtitles'));
   if (direct && !/^https?:\/\//i.test(direct)) return { transcript: direct, subtitleUrl: null };
-  const links = field(item, 'videoMeta.subtitleLinks');
-  if (Array.isArray(links)) {
-    for (const link of links) {
-      if (typeof link === 'string' && link.trim()) return { transcript: null, subtitleUrl: link.trim() };
-      if (link && typeof link === 'object') {
-        const record = link as Record<string, unknown>;
-        const url = asString(record.downloadLink) || asString(record.url);
-        const text = asString(record.text) || asString(record.transcript);
-        if (text) return { transcript: text, subtitleUrl: url };
-        if (url) return { transcript: null, subtitleUrl: url };
-      }
-    }
-  }
+  const picked = pickSubtitle(field(item, 'videoMeta.subtitleLinks'));
+  if (picked.transcript || picked.subtitleUrl) return picked;
   const transcription = asString(field(item, 'videoMeta.transcriptionLink'));
   if (transcription) return { transcript: null, subtitleUrl: transcription };
   if (direct) return { transcript: null, subtitleUrl: direct };

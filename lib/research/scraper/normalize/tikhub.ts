@@ -1,4 +1,5 @@
 import type { NormalizedVideo } from '../types';
+import { pickSubtitle } from '../subtitles';
 import { asNumber, asString, canonicalUrl, isoFromSeconds } from './shared';
 
 function firstUrl(value: unknown): string | null {
@@ -55,8 +56,7 @@ export function normalizeTikHubAweme(item: Record<string, unknown>, now = new Da
   const play = playUrl(video);
   const cla = video?.cla_info && typeof video.cla_info === 'object' ? (video.cla_info as Record<string, unknown>) : null;
   const captions = Array.isArray(cla?.caption_infos) ? cla.caption_infos : [];
-  const firstCaption = captions.find((entry) => entry && typeof entry === 'object') as { url?: unknown } | undefined;
-  const subtitleUrl = asString(firstCaption?.url);
+  const subtitleUrl = pickSubtitle(captions).subtitleUrl;
   const expires = play ? new Date(now.getTime() + 5 * 60 * 60 * 1000).toISOString() : null;
 
   return {
