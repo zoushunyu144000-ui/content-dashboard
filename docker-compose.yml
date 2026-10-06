@@ -33,7 +33,9 @@ services:
     network_mode: host
     command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=5433"]
     volumes:
-      - /home/box/services/content-intel/pgdata:/var/lib/postgresql/data
+      # Named volume: the Docker daemon on this box does not share the box filesystem,
+      # so host bind mounts would land on the daemon host, not /home/box.
+      - pgdata:/var/lib/postgresql/data
     env_file: /home/box/services/content-intel/app.env
     mem_limit: 512m
     restart: unless-stopped
@@ -50,9 +52,28 @@ services:
     mem_limit: 128m
     restart: unless-stopped
     volumes:
-      - /home/box/services/content-intel/backups:/backups
-      - ./deploy/backup.sh:/backup.sh:ro
-    entrypoint: ["/bin/sh", "/backup.sh"]
+      - backups:/backups
+    # deploy/backup.sh is inlined (bind-mounted scripts are not visible to the daemon).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -u
+        export PGHOST=127.0.0.1 PGPORT=5433 PGUSER="$${POSTGRES_USER}" PGPASSWORD="$${POSTGRES_PASSWORD}" PGDATABASE="$${POSTGRES_DB}"
+        dump_once() {
+          stamp=$$(date -u +%Y%m%d-%H%M)
+          pg_dump -Fc -f "/backups/content_intel-$${stamp}.dump" && echo "backup ok $${stamp}"
+          ls -1 /backups/content_intel-*.dump 2>/dev/null | sort -r | awk 'NR>7' | xargs -r rm -f
+        }
+        sleep 20
+        dump_once || echo "backup failed" >&2
+        while true; do sleep 86400; dump_once || echo "backup failed" >&2; done
     depends_on:
       db:
         condition: service_healthy
+
+volumes:
+  pgdata:
+    name: content-intel-pgdata
+  backups:
+    name: content-intel-backups
