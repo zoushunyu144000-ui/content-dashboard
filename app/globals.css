@@ -316,6 +316,31 @@
   overscroll-behavior-y: contain;
 }
 
+.feed-stage {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+
+.feed-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .feed-frame {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 9 / 16;
+  }
+}
+
 .feed-slide {
   height: 100%;
   scroll-snap-align: start;
