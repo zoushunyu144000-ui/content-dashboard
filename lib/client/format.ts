@@ -1,3 +1,5 @@
+import { canonicalLabel, titleCaseLabel } from '@/lib/research/labels';
+
 export function providerLabel(provider: string | null | undefined): string {
   if (provider === 'apify') return 'Apify TikTok';
   if (provider === 'tikhub') return 'TikHub TikTok';
@@ -35,11 +37,15 @@ export function formatTime(value: string | null | undefined): string {
 
 export function humanize(label: string | null | undefined): string {
   if (!label) return 'Untitled';
-  return label
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  const trimmed = label.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return 'Untitled';
+  const raw = !trimmed.includes(' ') && (trimmed.includes('_') || trimmed === trimmed.toLowerCase());
+  if (!raw) return trimmed;
+  const key = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return canonicalLabel(key) || titleCaseLabel(trimmed.replace(/[_-]+/g, ' '));
 }
 
 export function percentPoints(value: number | string | null | undefined): number {

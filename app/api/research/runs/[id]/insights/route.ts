@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
 import { getDb } from '@/lib/db';
+import { asNumber } from '@/lib/research/insight-groups';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,11 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     `;
     return NextResponse.json({
       run: runs[0],
-      clusters,
+      clusters: clusters.map((cluster) => ({
+        ...cluster,
+        video_count: asNumber(cluster.video_count),
+        percent: asNumber(cluster.percent),
+      })),
       high_potential: Number(highPotential[0]?.n || 0),
     });
   } catch (err) {

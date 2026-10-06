@@ -5,6 +5,7 @@ import { getAIProvider } from '@/lib/research/ai/provider';
 import {
   INSIGHT_MERGE_SCHEMA,
   INSIGHT_MERGE_SYSTEM,
+  PROMPT_VERSION as MERGE_PROMPT_VERSION,
   insightMergeUserPrompt,
   type InsightGroupDraft,
 } from '@/lib/research/ai/tasks/insight-merge';
@@ -23,6 +24,7 @@ import {
   type VideoAnalysisDraft,
   type VideoAnalysisInput,
 } from '@/lib/research/ai/tasks/video-analysis';
+import { finalizeInsightGroups, groupShare, sourceKey } from '@/lib/research/insight-groups';
 import { snakeLabel } from '@/lib/research/labels';
 import { scoreVideos, type ScoreInput } from '@/lib/research/score';
 import { InsufficientBalanceError, ScraperUnavailableError } from '@/lib/research/scraper/errors';
@@ -803,7 +805,7 @@ async function cluster(sql: Sql, run: RunRow): Promise<string> {
   `;
   const buckets = new Map<string, { kind: InsightGroupDraft['kind']; label: string; videos: Set<string> }>();
   const add = (kind: InsightGroupDraft['kind'], label: string | null, videoId: string) => {
-    const normalized = kind === 'pain_point' || kind === 'topic' ? snakeLabel(label) : label?.trim().toLowerCase() || null;
+    const normalized = sourceKey(kind, label);
     if (!normalized) return;
     const key = `${kind}:${normalized}`;
     const bucket = buckets.get(key) || { kind, label: normalized, videos: new Set<string>() };
@@ -839,28 +841,33 @@ async function cluster(sql: Sql, run: RunRow): Promise<string> {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'insight merge failed';
       await event(sql, run.id, 'clustering', `Insight merge failed (${message}). Using tag counts.`);
+      groups = [];
+      method = 'tag_count';
     }
   }
 
+  const finalized = finalizeInsightGroups(
+    Array.from(buckets.values()).map((bucket) => ({ kind: bucket.kind, label: bucket.label, count: bucket.videos.size })),
+    method === 'hybrid' ? groups : null,
+  );
+  if (!finalized.usedModel) method = 'tag_count';
+
   await sql`delete from insight_clusters where run_id = ${run.id}`;
-  const claimed = new Set<string>();
   const analyzed = analyses.length;
-  const writeGroup = async (kind: InsightGroupDraft['kind'], label: string, summary: string, labels: string[]) => {
+  for (const group of finalized.groups) {
     const videos = new Set<string>();
-    for (const source of labels) {
-      const key = `${kind}:${source}`;
-      const bucket = buckets.get(key);
-      if (!bucket || claimed.has(key)) continue;
-      claimed.add(key);
+    for (const source of group.source_labels) {
+      const bucket = buckets.get(`${group.kind}:${source}`);
+      if (!bucket) continue;
       bucket.videos.forEach((id) => videos.add(id));
     }
-    if (videos.size === 0) return;
-    const percent = analyzed === 0 ? 0 : videos.size / analyzed;
+    if (videos.size === 0) continue;
+    const percent = groupShare(videos.size, analyzed);
     const inserted = await sql<{ id: string }[]>`
       insert into insight_clusters (run_id, kind, label, summary, video_count, percent, method, source_labels)
       values (
-        ${run.id}, ${kind}, ${label}, ${summary || null}, ${videos.size}, ${percent}, ${method},
-        ${sql.array(labels)}
+        ${run.id}, ${group.kind}, ${group.label}, ${group.summary || null}, ${videos.size}, ${percent}, ${method},
+        ${sql.array(group.source_labels)}
       )
       on conflict (run_id, kind, label) do update set
         summary = excluded.summary,
@@ -871,7 +878,7 @@ async function cluster(sql: Sql, run: RunRow): Promise<string> {
       returning id
     `;
     const clusterId = inserted[0]?.id;
-    if (!clusterId) return;
+    if (!clusterId) continue;
     for (const videoId of Array.from(videos)) {
       await sql`
         insert into insight_cluster_videos (cluster_id, video_id)
@@ -879,18 +886,13 @@ async function cluster(sql: Sql, run: RunRow): Promise<string> {
         on conflict do nothing
       `;
     }
-  };
-
-  for (const group of groups) {
-    const labels = group.source_labels
-      .map((label) => (group.kind === 'pain_point' || group.kind === 'topic' ? snakeLabel(label) : label.trim().toLowerCase()))
-      .filter((label): label is string => !!label && buckets.has(`${group.kind}:${label}`));
-    await writeGroup(group.kind, snakeLabel(group.label) || group.label, group.summary, labels);
   }
-  for (const bucket of Array.from(buckets.values())) {
-    if (claimed.has(`${bucket.kind}:${bucket.label}`)) continue;
-    await writeGroup(bucket.kind, bucket.label, '', [bucket.label]);
-  }
+  await event(
+    sql,
+    run.id,
+    'clustering',
+    `Insight merge ${MERGE_PROMPT_VERSION} (${method}) mapped ${buckets.size} labels into ${finalized.groups.length} groups`,
+  );
 
   await sql`
     update research_runs
@@ -929,6 +931,7 @@ async function writeInsights(sql: Sql, run: RunRow): Promise<string> {
           .map((link) => link.video_id),
       }));
   const insights = {
+    prompt_version: MERGE_PROMPT_VERSION,
     top_pain_points: pack('pain_point'),
     top_hooks: pack('hook'),
     top_content_structures: pack('structure'),
