@@ -104,6 +104,14 @@
   font-weight: 600;
 }
 
+.btn-primary,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .btn-primary {
   border: 1px solid transparent;
   background: var(--accent);
@@ -111,7 +119,7 @@
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .btn-primary:disabled,
