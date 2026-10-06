@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Outfit, DM_Sans, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import ClientLayout from '@/components/ClientLayout';
 import ThemeProvider from '@/components/ThemeProvider';
 import ToastProvider from '@/components/ToastProvider';
@@ -7,22 +7,25 @@ import GlobalFeatures from '@/components/GlobalFeatures';
 import { BRAND } from '@/lib/brand';
 import './globals.css';
 
-const outfit = Outfit({
-  subsets: ['latin'],
+const geistHeading = localFont({
+  src: './fonts/GeistVF.woff',
   variable: '--font-heading',
-  weight: ['400', '500', '600', '700'],
+  weight: '100 900',
+  display: 'swap',
 });
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
+const geistBody = localFont({
+  src: './fonts/GeistVF.woff',
   variable: '--font-body',
-  weight: ['300', '400', '500', '600', '700'],
+  weight: '100 900',
+  display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
+const geistMono = localFont({
+  src: './fonts/GeistMonoVF.woff',
   variable: '--font-mono',
-  weight: ['400', '500', '600', '700'],
+  weight: '100 900',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -36,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${outfit.variable} ${dmSans.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${geistHeading.variable} ${geistBody.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="font-body antialiased">
         <ThemeProvider>
           <GlobalFeatures />

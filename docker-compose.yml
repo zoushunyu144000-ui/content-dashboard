@@ -1,0 +1,58 @@
+name: content-intel
+
+services:
+  app:
+    image: content-intel:local
+    container_name: content-intel
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Content Intelligence}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://research.logos144000.com}
+    network_mode: host
+    mem_limit: 2g
+    restart: unless-stopped
+    env_file: /home/box/services/content-intel/app.env
+    environment:
+      PORT: "3100"
+      HOSTNAME: 127.0.0.1
+      RESEARCH_WORKER: "1"
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  db:
+    image: postgres:16-alpine
+    network_mode: host
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "port=5433"]
+    volumes:
+      - /home/box/services/content-intel/pgdata:/var/lib/postgresql/data
+    env_file: /home/box/services/content-intel/app.env
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5433"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backup:
+    image: postgres:16-alpine
+    network_mode: host
+    env_file: /home/box/services/content-intel/app.env
+    mem_limit: 128m
+    restart: unless-stopped
+    volumes:
+      - /home/box/services/content-intel/backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
