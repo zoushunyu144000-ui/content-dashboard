@@ -2,24 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from './ThemeProvider';
 import { createClient } from '@/lib/supabase/client';
 import { BRAND } from '@/lib/config';
 
-interface BadgeCounts {
-  tasks: number;
-  email: number;
-}
-
 const NAV_SECTIONS = [
   {
-    label: 'MAIN',
+    label: '',
     items: [
       {
         href: '/',
-        label: 'Overview',
-        badgeKey: null as keyof BadgeCounts | null,
+        label: 'Dashboard',
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -28,87 +21,39 @@ const NAV_SECTIONS = [
           </svg>
         ),
       },
-      {
-        href: '/financials',
-        label: 'Revenue',
-        badgeKey: null as keyof BadgeCounts | null,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <line x1="12" y1="1" x2="12" y2="23" />
-            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-          </svg>
-        ),
-      },
     ],
   },
   {
-    label: 'CONTENT',
+    label: 'INTELLIGENCE',
     items: [
       {
-        href: '/content',
-        label: 'Performance',
-        badgeKey: null as keyof BadgeCounts | null,
+        href: '/research',
+        label: 'Research',
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <circle cx="11" cy="11" r="7" />
+            <line x1="16.5" y1="16.5" x2="21" y2="21" />
           </svg>
         ),
       },
       {
-        href: '/hooks',
-        label: 'Hooks',
-        badgeKey: null as keyof BadgeCounts | null,
+        href: '/feed',
+        label: 'Feed',
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <path d="M15.5 5.5C15.5 7.43 13.93 9 12 9S8.5 7.43 8.5 5.5 10.07 2 12 2s3.5 1.57 3.5 3.5z" />
-            <path d="M8.5 5.5C8.5 5.5 4 8 4 13c0 3.5 2.5 6 5 7" />
-            <path d="M15.5 5.5C15.5 5.5 20 8 20 13c0 3.5-2.5 6-5 7" />
-            <path d="M12 9v13" />
+            <rect x="7" y="3" width="10" height="18" rx="2" />
+            <line x1="11" y1="18" x2="13" y2="18" />
           </svg>
         ),
       },
       {
-        href: '/competitors',
-        label: 'Competitors',
-        badgeKey: null as keyof BadgeCounts | null,
+        href: '/insights',
+        label: 'Insights',
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <circle cx="9" cy="7" r="3" />
-            <circle cx="17" cy="9" r="2.5" />
-            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-            <path d="M15.5 14.5c2.6.5 4.5 2.8 4.5 5.5" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'PUBLISHING',
-    items: [
-      {
-        href: '/schedule',
-        label: 'Schedule',
-        badgeKey: null as keyof BadgeCounts | null,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-        ),
-      },
-      {
-        href: '/calendar',
-        label: 'Content Calendar',
-        badgeKey: null as keyof BadgeCounts | null,
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-[18px] h-[18px]">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
+            <path d="M4 19V5" />
+            <path d="M4 19h16" />
+            <path d="M8 15l3-4 3 2 4-6" />
           </svg>
         ),
       },
@@ -116,15 +61,11 @@ const NAV_SECTIONS = [
   },
 ];
 
-// Map href paths to page_access slugs
 const HREF_TO_SLUG: Record<string, string> = {
   '/': 'overview',
-  '/financials': 'financials',
-  '/content': 'content',
-  '/hooks': 'hooks',
-  '/competitors': 'competitors',
-  '/schedule': 'schedule',
-  '/calendar': 'calendar',
+  '/research': 'research',
+  '/feed': 'feed',
+  '/insights': 'insights',
 };
 
 interface SidebarProps {
@@ -137,26 +78,6 @@ interface SidebarProps {
 export default function Sidebar({ role = 'admin', pageAccess = [], userName = '', userEmail = '' }: SidebarProps) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
-  const [badges, setBadges] = useState<BadgeCounts>({ tasks: 0, email: 0 });
-
-  const fetchBadges = useCallback(async () => {
-    try {
-      const res = await fetch('/api/badges');
-      if (res.ok) {
-        const data = await res.json();
-        setBadges(data);
-      }
-    } catch {
-      // silently fail
-    }
-  }, []);
-
-  useEffect(() => {
-    if (pathname === '/login') return;
-    fetchBadges();
-    const interval = setInterval(fetchBadges, 60000);
-    return () => clearInterval(interval);
-  }, [fetchBadges, pathname]);
 
   if (pathname === '/login') return null;
 
@@ -174,7 +95,6 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
         borderColor: 'var(--sidebar-border)',
       }}
     >
-      {/* Brand */}
       <div className="px-5 pt-5 pb-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -184,7 +104,6 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
         />
       </div>
 
-      {/* Nav sections */}
       <div className="flex-1 overflow-y-auto px-3 space-y-6">
         {NAV_SECTIONS.map((section) => {
           const visibleItems = role === 'admin'
@@ -195,75 +114,63 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
               });
           if (visibleItems.length === 0) return null;
           return (
-          <div key={section.label}>
-            <div
-              className="px-3 mb-2 text-[10px] font-semibold tracking-[1.5px] uppercase"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              {section.label}
-            </div>
-            <div className="flex flex-col gap-0.5">
-              {visibleItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/' && pathname.startsWith(item.href));
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 group ${
-                      isActive
-                        ? 'text-[var(--accent)]'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                    style={{
-                      background: isActive
-                        ? 'var(--accent-glow)'
-                        : undefined,
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive)
-                        e.currentTarget.style.background = 'var(--card-hover)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.background = '';
-                    }}
-                  >
-                    {isActive && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-sm animate-slide-in-left"
-                        style={{
-                          background: 'var(--accent)',
-                          boxShadow: '0 0 8px var(--accent-glow)',
-                        }}
-                      />
-                    )}
-                    <span className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'}>
-                      {item.icon}
-                    </span>
-                    {item.label}
-                    {item.badgeKey && badges[item.badgeKey] > 0 && (
-                      <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-red text-white text-[10px] font-bold flex items-center justify-center px-1.5">
-                        {badges[item.badgeKey]}
+            <div key={section.label || 'root'}>
+              {section.label ? (
+                <div
+                  className="px-3 mb-2 text-[10px] font-semibold tracking-[1.5px] uppercase"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {section.label}
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-0.5">
+                {visibleItems.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== '/' && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 group ${
+                        isActive
+                          ? 'text-[var(--accent)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      style={{ background: isActive ? 'var(--accent-glow)' : undefined }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) e.currentTarget.style.background = 'var(--card-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) e.currentTarget.style.background = '';
+                      }}
+                    >
+                      {isActive && (
+                        <span
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-sm"
+                          style={{ background: 'var(--accent)' }}
+                        />
+                      )}
+                      <span className={isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'}>
+                        {item.icon}
                       </span>
-                    )}
-                  </Link>
-                );
-              })}
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
           );
         })}
       </div>
 
-      {/* Footer */}
       <div className="px-3 pb-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-3 px-3 py-3">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
             style={{ background: 'var(--accent)' }}
           >
-            {(userName || userEmail || '?').split(' ').map(w => w[0]?.toUpperCase()).join('').slice(0, 2) || '?'}
+            {(userName || userEmail || '?').split(' ').map((w) => w[0]?.toUpperCase()).join('').slice(0, 2) || '?'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
@@ -273,15 +180,12 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
               {role === 'admin' ? 'Admin' : 'Member'}
             </div>
           </div>
-          {/* Theme toggle */}
           <button
             onClick={toggleTheme}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 flex-shrink-0"
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-            }}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            type="button"
           >
             {theme === 'dark' ? (
               <svg className="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--amber)' }}>
@@ -306,14 +210,7 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
           onClick={handleLogout}
           className="w-full text-left px-3 py-1.5 text-[11px] rounded-md transition-colors duration-200"
           style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--red)';
-            e.currentTarget.style.background = 'var(--card-hover)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--text-muted)';
-            e.currentTarget.style.background = '';
-          }}
+          type="button"
         >
           Sign out
         </button>
