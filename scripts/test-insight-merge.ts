@@ -1,5 +1,6 @@
 import { PROMPT_VERSION } from '../lib/research/ai/tasks/insight-merge';
 import { humanize } from '../lib/client/format';
+import { isOffTopic } from '../lib/research/relevance';
 import {
   asNumber,
   clusterDisplayLabel,
@@ -118,6 +119,8 @@ const doubled = finalizeInsightGroups(
 );
 const pricing = doubled.groups.filter((group) => group.kind === 'topic');
 assert(pricing.length === 1 && pricing[0].source_labels.slice().sort().join() === 'fees,pricing', 'duplicate titles and repeated sources collapse');
+
+assert(isOffTopic(39) && !isOffTopic(40) && !isOffTopic(null) && !isOffTopic(undefined), 'relevance under 40 is off-topic and missing scores stay relevant');
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log('insight merge ok');

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
 import { getDb } from '@/lib/db';
+import { RELEVANCE_MIN } from '@/lib/research/relevance';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,17 @@ export async function GET() {
       limit 8
     `;
     const highPotential = await sql<{ n: number }[]>`
-      select count(*)::int as n from research_run_videos where is_high_potential
+      select count(*)::int as n
+      from research_run_videos rv
+      left join lateral (
+        select relevance
+        from video_analyses
+        where run_id = rv.run_id and video_id = rv.video_id and status = 'complete'
+        order by created_at desc
+        limit 1
+      ) a on true
+      where rv.is_high_potential
+        and (a.relevance is null or a.relevance >= ${RELEVANCE_MIN})
     `;
     return NextResponse.json({
       projects: Number(projects[0]?.n || 0),

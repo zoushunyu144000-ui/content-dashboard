@@ -11,6 +11,7 @@ import { useToast } from '@/components/ToastProvider';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatCount, formatTime, providerLabel } from '@/lib/client/format';
+import { isOffTopic } from '@/lib/research/relevance';
 
 interface RunRow {
   id: string;
@@ -42,6 +43,7 @@ interface VideoRow extends InsightExample {
   is_high_potential: boolean | null;
   hook: string | null;
   analysis_status: string | null;
+  relevance?: number | null;
 }
 
 const SECTIONS: Array<{ kind: string; key: string; title: string }> = [
@@ -68,6 +70,8 @@ export default function InsightsHome() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [analyzedCount, setAnalyzedCount] = useState<number | null>(null);
+  const [onTopicCount, setOnTopicCount] = useState<number | null>(null);
 
   function writeRun(id: string) {
     setRunId(id);
@@ -118,8 +122,15 @@ export default function InsightsHome() {
     let cancelled = false;
     setLoading(true);
     setError('');
+    setAnalyzedCount(null);
+    setOnTopicCount(null);
     Promise.all([
-      api<{ run: { insights: Record<string, PackedItem[]> | null; scraper_provider: string | null; scraper_note: string | null; status: string }; clusters: ClusterRow[] }>(
+      api<{
+        run: { insights: Record<string, PackedItem[]> | null; scraper_provider: string | null; scraper_note: string | null; status: string };
+        clusters: ClusterRow[];
+        analyzed?: number;
+        on_topic?: number;
+      }>(
         `/api/research/runs/${runId}/insights`,
       ),
       api<{ videos: VideoRow[]; scraper_provider: string | null; scraper_note: string | null }>(
@@ -135,6 +146,8 @@ export default function InsightsHome() {
         setNote(insightData.run?.scraper_note || videoData.scraper_note);
         setVideos(videoData.videos || []);
         setIdeas(ideaData.ideas || []);
+        setAnalyzedCount(typeof insightData.analyzed === 'number' ? insightData.analyzed : null);
+        setOnTopicCount(typeof insightData.on_topic === 'number' ? insightData.on_topic : null);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message || 'Could not load insights');
@@ -148,8 +161,8 @@ export default function InsightsHome() {
   }, [runId]);
 
   const selected = runs.find((run) => run.id === runId) || null;
-  const analyzed = videos.filter((video) => video.analysis_status === 'complete').length;
-  const highPotential = videos.filter((video) => video.is_high_potential);
+  const analyzed = analyzedCount ?? videos.filter((video) => video.analysis_status === 'complete').length;
+  const highPotential = videos.filter((video) => video.is_high_potential && !isOffTopic(video.relevance));
 
   const sections = useMemo(() => {
     return SECTIONS.map((section) => {
@@ -203,6 +216,9 @@ export default function InsightsHome() {
         <div>
           <h1 className="font-heading text-2xl">Insights</h1>
           <p className="mt-1 text-sm text-muted">{project?.name || 'Choose a project'}</p>
+          {selected && analyzedCount != null && onTopicCount != null ? (
+            <p className="mt-1 text-sm">{onTopicCount} of {analyzedCount} analyzed videos on-topic</p>
+          ) : null}
         </div>
         <button type="button" className="btn-primary" onClick={generate} disabled={generating || !runId || selected?.status !== 'completed'}>
           {generating ? 'Generating…' : 'Generate Content Ideas'}

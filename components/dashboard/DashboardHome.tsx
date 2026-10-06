@@ -8,6 +8,7 @@ import StatBox from '@/components/StatBox';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatTime, humanize, percentPoints, providerLabel, stepLabel } from '@/lib/client/format';
+import { isOffTopic } from '@/lib/research/relevance';
 
 interface RunRow {
   id: string;
@@ -30,6 +31,7 @@ interface InsightItem {
 interface VideoRow {
   analysis_status: string | null;
   is_high_potential: boolean | null;
+  relevance?: number | null;
 }
 
 function statusClass(status: string): string {
@@ -115,7 +117,7 @@ export default function DashboardHome() {
 
   const completed = runs.find((run) => run.status === 'completed') || null;
   const analyzed = videos.filter((video) => video.analysis_status === 'complete').length;
-  const highPotential = videos.filter((video) => video.is_high_potential).length;
+  const highPotential = videos.filter((video) => video.is_high_potential && !isOffTopic(video.relevance)).length;
   const recent = runs.slice(0, 8);
   const projectQuery = project ? `project=${encodeURIComponent(project.id)}` : '';
 

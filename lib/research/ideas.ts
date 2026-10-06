@@ -1,5 +1,6 @@
 import 'server-only';
 import { getDb } from '@/lib/db';
+import { RELEVANCE_MIN } from '@/lib/research/relevance';
 import { getAIProvider } from '@/lib/research/ai/provider';
 import {
   CONTENT_IDEA_SCHEMA,
@@ -38,7 +39,15 @@ export async function generateIdeas(runId: string): Promise<{ count: number }> {
     select v.caption, v.author_handle, v.views, rv.viral_score
     from research_run_videos rv
     join videos v on v.id = rv.video_id
+    left join lateral (
+      select relevance
+      from video_analyses
+      where run_id = rv.run_id and video_id = rv.video_id and status = 'complete'
+      order by created_at desc
+      limit 1
+    ) a on true
     where rv.run_id = ${runId}
+      and (a.relevance is null or a.relevance >= ${RELEVANCE_MIN})
     order by rv.viral_score desc nulls last
     limit 8
   `;

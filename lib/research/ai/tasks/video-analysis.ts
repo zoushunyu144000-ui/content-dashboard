@@ -1,7 +1,7 @@
 import type { JsonSchema } from '../schema';
 
-export const PROMPT_VERSION = 'va-v1';
-export const ANALYSIS_VERSION = 'va-1';
+export const PROMPT_VERSION = 'va-v2';
+export const ANALYSIS_VERSION = 'va-2';
 
 const analysisItem: JsonSchema = {
   type: 'object',
@@ -20,6 +20,8 @@ const analysisItem: JsonSchema = {
     'replicability',
     'hook_text',
     'summary',
+    'relevance',
+    'relevance_reason',
   ],
   properties: {
     video_ref: { type: 'string', minLength: 1 },
@@ -44,6 +46,13 @@ const analysisItem: JsonSchema = {
     replicability: { type: 'integer', minimum: 0, maximum: 100 },
     hook_text: { type: 'string' },
     summary: { type: 'string' },
+    relevance: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      description: '0-100 fit to the run topic and project niche. Below 40 is off-topic.',
+    },
+    relevance_reason: { type: 'string', description: 'One short sentence.' },
   },
 };
 
@@ -65,6 +74,9 @@ Use only the caption, author, metrics, and transcript provided. Do not invent me
 pain_point and topic must be short snake_case labels (example: slow_website, client_pricing).
 hook_type, emotion, and content_structure must use the enum values.
 replicability is an integer from 0 to 100: how reusable the pattern is for the project's audience.
+relevance is an integer from 0 to 100: how closely the video matches the run topic and the project niche. 0 is unrelated. 100 is exactly about that topic for that niche. Below 40 is off-topic.
+relevance_reason is one short sentence explaining the relevance score.
+Judge relevance only against the topic and niche in the input.
 Return one analysis per input video_ref.`;
 
 export interface VideoAnalysisInput {
@@ -94,11 +106,19 @@ export interface VideoAnalysisDraft {
   replicability: number;
   hook_text: string;
   summary: string;
+  relevance: number;
+  relevance_reason: string;
 }
 
-export function videoAnalysisUserPrompt(videos: VideoAnalysisInput[]): string {
+export function videoAnalysisUserPrompt(input: {
+  topic: string;
+  niche: string | null;
+  videos: VideoAnalysisInput[];
+}): string {
   return JSON.stringify({
-    videos: videos.map((video) => ({
+    topic: input.topic,
+    niche: input.niche,
+    videos: input.videos.map((video) => ({
       ...video,
       transcript: video.transcript ? video.transcript.slice(0, 1500) : null,
     })),

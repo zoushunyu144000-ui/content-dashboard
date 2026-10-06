@@ -26,6 +26,7 @@ import {
 } from '@/lib/research/ai/tasks/video-analysis';
 import { finalizeInsightGroups, groupShare, sourceKey } from '@/lib/research/insight-groups';
 import { snakeLabel } from '@/lib/research/labels';
+import { RELEVANCE_MIN } from '@/lib/research/relevance';
 import { scoreVideos, type ScoreInput } from '@/lib/research/score';
 import { InsufficientBalanceError, ScraperUnavailableError } from '@/lib/research/scraper/errors';
 import {
@@ -618,6 +619,12 @@ function num(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function boundedScore(value: unknown): number | null {
+  const parsed = num(value);
+  if (parsed == null) return null;
+  return Math.min(100, Math.max(0, Math.round(parsed)));
+}
+
 async function scoreRun(sql: Sql, run: RunRow): Promise<string> {
   const rows = await sql<
     {
@@ -725,6 +732,9 @@ async function analyze(sql: Sql, run: RunRow): Promise<string> {
     return 'clustering';
   }
 
+  const projects = await sql<{ niche: string | null }[]>`
+    select niche from projects where id = ${run.project_id} limit 1
+  `;
   const inputs: VideoAnalysisInput[] = pending.map((row) => ({
     video_ref: row.id,
     caption: row.caption,
@@ -741,7 +751,7 @@ async function analyze(sql: Sql, run: RunRow): Promise<string> {
   const result = await ai.completeJson<{ analyses: VideoAnalysisDraft[] }>({
     task: 'video_analysis',
     system: VIDEO_ANALYSIS_SYSTEM,
-    user: videoAnalysisUserPrompt(inputs),
+    user: videoAnalysisUserPrompt({ topic: run.topic, niche: projects[0]?.niche || null, videos: inputs }),
     schemaName: 'video_analyses',
     schema: VIDEO_ANALYSIS_SCHEMA,
     maxTokens: 8000,
@@ -778,17 +788,19 @@ async function insertAnalysis(
     analysis && Number.isInteger(analysis.replicability)
       ? Math.min(100, Math.max(0, analysis.replicability))
       : null;
+  const relevance = boundedScore(analysis?.relevance);
+  const relevanceReason = analysis?.relevance_reason?.trim().slice(0, 280) || null;
   await sql`
     insert into video_analyses (
       run_id, video_id, audience, pain_point, hook, hook_type, emotion, topic, content_structure,
-      viral_hypothesis, reusable_pattern, replicability, hook_text, summary, model, prompt_version,
-      analysis_version, raw_json, status, error
+      viral_hypothesis, reusable_pattern, replicability, relevance, relevance_reason, hook_text, summary,
+      model, prompt_version, analysis_version, raw_json, status, error
     ) values (
       ${runId}, ${videoId}, ${analysis?.audience || null}, ${snakeLabel(analysis?.pain_point)},
       ${analysis?.hook || null}, ${analysis?.hook_type || null}, ${analysis?.emotion || null},
       ${snakeLabel(analysis?.topic)}, ${analysis?.content_structure || null}, ${analysis?.viral_hypothesis || null},
-      ${analysis?.reusable_pattern || null}, ${replicability}, ${analysis?.hook_text || null},
-      ${analysis?.summary || null}, ${model}, ${PROMPT_VERSION}, ${ANALYSIS_VERSION},
+      ${analysis?.reusable_pattern || null}, ${replicability}, ${relevance}, ${relevanceReason},
+      ${analysis?.hook_text || null}, ${analysis?.summary || null}, ${model}, ${PROMPT_VERSION}, ${ANALYSIS_VERSION},
       ${analysis ? sql.json(analysis as never) : null}, ${status}, ${error}
     )
     on conflict (run_id, video_id, prompt_version) do nothing
@@ -799,9 +811,13 @@ async function cluster(sql: Sql, run: RunRow, options?: { preserveStatus?: boole
   const analyses = await sql<
     { video_id: string; pain_point: string | null; hook_type: string | null; emotion: string | null; topic: string | null; content_structure: string | null }[]
   >`
-    select video_id, pain_point, hook_type, emotion, topic, content_structure
+    select distinct on (video_id)
+      video_id, pain_point, hook_type, emotion, topic, content_structure, relevance
     from video_analyses
-    where run_id = ${run.id} and status = 'complete' and prompt_version = ${PROMPT_VERSION}
+    where run_id = ${run.id}
+      and status = 'complete'
+      and (relevance is null or relevance >= ${RELEVANCE_MIN})
+    order by video_id, created_at desc
   `;
   const buckets = new Map<string, { kind: InsightGroupDraft['kind']; label: string; videos: Set<string> }>();
   const add = (kind: InsightGroupDraft['kind'], label: string | null, videoId: string) => {

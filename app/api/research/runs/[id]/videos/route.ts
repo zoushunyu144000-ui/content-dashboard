@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
 import { getDb } from '@/lib/db';
-import { PROMPT_VERSION } from '@/lib/research/ai/tasks/video-analysis';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,12 +28,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
                  rv.engagement_score, rv.outlier_score, rv.freshness_score, rv.viral_score,
                  rv.is_high_potential, rv.score_components, rv.rank,
                  a.audience, a.pain_point, a.hook, a.hook_type, a.emotion, a.topic, a.content_structure,
-                 a.viral_hypothesis, a.reusable_pattern, a.replicability, a.summary, a.status as analysis_status
+                 a.viral_hypothesis, a.reusable_pattern, a.replicability, a.relevance, a.relevance_reason,
+                 a.summary, a.status as analysis_status
           from research_run_videos rv
           join videos v on v.id = rv.video_id
-          left join video_analyses a
-            on a.run_id = rv.run_id and a.video_id = rv.video_id
-           and a.prompt_version = ${PROMPT_VERSION} and a.status = 'complete'
+          left join lateral (
+            select audience, pain_point, hook, hook_type, emotion, topic, content_structure,
+                   viral_hypothesis, reusable_pattern, replicability, relevance, relevance_reason,
+                   summary, status
+            from video_analyses
+            where run_id = rv.run_id and video_id = rv.video_id and status = 'complete'
+            order by created_at desc
+            limit 1
+          ) a on true
           where rv.run_id = ${params.id}
           order by v.published_at desc nulls last
           limit ${limit}
@@ -47,12 +53,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
                  rv.engagement_score, rv.outlier_score, rv.freshness_score, rv.viral_score,
                  rv.is_high_potential, rv.score_components, rv.rank,
                  a.audience, a.pain_point, a.hook, a.hook_type, a.emotion, a.topic, a.content_structure,
-                 a.viral_hypothesis, a.reusable_pattern, a.replicability, a.summary, a.status as analysis_status
+                 a.viral_hypothesis, a.reusable_pattern, a.replicability, a.relevance, a.relevance_reason,
+                 a.summary, a.status as analysis_status
           from research_run_videos rv
           join videos v on v.id = rv.video_id
-          left join video_analyses a
-            on a.run_id = rv.run_id and a.video_id = rv.video_id
-           and a.prompt_version = ${PROMPT_VERSION} and a.status = 'complete'
+          left join lateral (
+            select audience, pain_point, hook, hook_type, emotion, topic, content_structure,
+                   viral_hypothesis, reusable_pattern, replicability, relevance, relevance_reason,
+                   summary, status
+            from video_analyses
+            where run_id = rv.run_id and video_id = rv.video_id and status = 'complete'
+            order by created_at desc
+            limit 1
+          ) a on true
           where rv.run_id = ${params.id}
           order by rv.viral_score desc nulls last
           limit ${limit}

@@ -222,6 +222,18 @@
 .status-failed { color: var(--red); border-color: rgba(240, 113, 120, 0.4); }
 .status-running { color: var(--amber); border-color: rgba(228, 177, 90, 0.35); }
 
+.off-topic-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(228, 177, 90, 0.45);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #f6e7c1;
+  background: rgba(228, 177, 90, 0.16);
+}
+
 .score-badge {
   display: inline-flex;
   align-items: center;

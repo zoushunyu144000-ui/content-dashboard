@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import MetricPill from './MetricPill';
 import ScoreBadge from './ScoreBadge';
 import { humanize, providerLabel } from '@/lib/client/format';
+import { isOffTopic } from '@/lib/research/relevance';
 
 export interface FeedVideo {
   id: string;
@@ -34,6 +35,8 @@ export interface FeedVideo {
   topic: string | null;
   reusable_pattern: string | null;
   replicability: number | null;
+  relevance?: number | null;
+  relevance_reason?: string | null;
 }
 
 interface FeedViewerProps {
@@ -137,6 +140,7 @@ function Analysis({ video, provider }: { video: FeedVideo; provider: string | nu
           </div>
           <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
         </div>
+        {isOffTopic(video.relevance) ? <div className="mt-2"><span className="off-topic-chip">Off-topic</span></div> : null}
         <div className="mt-2">
           <MetricPill label="Followers" value={video.author_followers} />
         </div>
@@ -178,6 +182,8 @@ function Analysis({ video, provider }: { video: FeedVideo; provider: string | nu
           <div><dt className="text-muted">Topic</dt><dd>{video.topic ? humanize(video.topic) : '—'}</dd></div>
           <div><dt className="text-muted">Reusable pattern</dt><dd>{textOrDash(video.reusable_pattern)}</dd></div>
           <div><dt className="text-muted">Replicability</dt><dd>{textOrDash(video.replicability)}</dd></div>
+          <div><dt className="text-muted">Relevance</dt><dd>{textOrDash(video.relevance)}</dd></div>
+          <div><dt className="text-muted">Relevance reason</dt><dd>{textOrDash(video.relevance_reason)}</dd></div>
         </dl>
       ) : null}
       {video.url ? (
@@ -310,9 +316,12 @@ function MobileAnalysis({ video, provider, countLabel }: { video: FeedVideo; pro
   const [open, setOpen] = useState(false);
   return (
     <div className="absolute inset-x-0 bottom-0 z-20 md:hidden">
-      <button type="button" className="menu-button mb-4 ml-3" onClick={() => setOpen((value) => !value)}>
-        {open ? 'Hide analysis' : 'Analysis'}
-      </button>
+      <div className="mb-4 ml-3 flex items-center gap-2">
+        {isOffTopic(video.relevance) ? <span className="off-topic-chip">Off-topic</span> : null}
+        <button type="button" className="menu-button" onClick={() => setOpen((value) => !value)}>
+          {open ? 'Hide analysis' : 'Analysis'}
+        </button>
+      </div>
       {open ? (
         <div
           data-feed-panel
