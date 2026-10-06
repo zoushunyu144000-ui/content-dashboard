@@ -11,6 +11,7 @@ import { useToast } from '@/components/ToastProvider';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatCount, formatTime, providerLabel } from '@/lib/client/format';
+import { t } from '@/lib/i18n';
 
 interface RunRow {
   id: string;
@@ -56,12 +57,12 @@ interface HighPotentialVideo {
   hook: string | null;
 }
 
-const SECTIONS: Array<{ kind: string; key: string; title: string }> = [
-  { kind: 'pain_point', key: 'top_pain_points', title: 'Top Pain Points' },
-  { kind: 'hook', key: 'top_hooks', title: 'Top Hooks' },
-  { kind: 'structure', key: 'top_content_structures', title: 'Top Content Structures' },
-  { kind: 'emotion', key: 'top_emotions', title: 'Top Emotions' },
-  { kind: 'topic', key: 'emerging_topics', title: 'Emerging Topics' },
+const SECTIONS: Array<{ kind: string; key: string; titleKey: string }> = [
+  { kind: 'pain_point', key: 'top_pain_points', titleKey: 'insights.section.painPoints' },
+  { kind: 'hook', key: 'top_hooks', titleKey: 'insights.section.hooks' },
+  { kind: 'structure', key: 'top_content_structures', titleKey: 'insights.section.structures' },
+  { kind: 'emotion', key: 'top_emotions', titleKey: 'insights.section.emotions' },
+  { kind: 'topic', key: 'emerging_topics', titleKey: 'insights.section.topics' },
 ];
 
 export default function InsightsHome() {
@@ -119,7 +120,7 @@ export default function InsightsHome() {
       })
       .catch((err: Error) => {
         if (!cancelled) {
-          setError(err.message || 'Could not load runs');
+          setError(err.message || t('research.loadRunsError'));
           setLoading(false);
         }
       });
@@ -164,7 +165,7 @@ export default function InsightsHome() {
         setHighPotential(Array.isArray(insightData.high_potential) ? insightData.high_potential : []);
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message || 'Could not load insights');
+        if (!cancelled) setError(err.message || t('insights.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -204,7 +205,7 @@ export default function InsightsHome() {
             .map((id) => videos.find((video) => video.id === id))
             .filter((video): video is VideoRow => Boolean(video)),
         }));
-      return { ...section, rows };
+      return { ...section, title: t(section.titleKey), rows };
     });
   }, [clusters, packed, videos]);
 
@@ -215,7 +216,7 @@ export default function InsightsHome() {
       const data = await api<{ ideas: ContentIdea[] }>(`/api/research/runs/${runId}/ideas`, { method: 'POST' });
       setIdeas(data.ideas || []);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not generate ideas', 'error');
+      showToast(err instanceof Error ? err.message : t('insights.generateError'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -227,31 +228,32 @@ export default function InsightsHome() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl">Insights</h1>
-          <p className="mt-1 text-sm text-muted">{project?.name || 'Choose a project'}</p>
+          <h1 className="font-heading text-2xl">{t('insights.title')}</h1>
+          <p className="mt-1 text-sm text-muted">{project?.name || t('project.choose')}</p>
           {selected && analyzedCount != null && onTopicCount != null ? (
-            <p className="mt-1 text-sm">{onTopicCount} of {analyzedCount} analyzed videos on-topic</p>
+            <p className="mt-1 text-sm">{t('insights.onTopic', { on: onTopicCount, analyzed: analyzedCount })}</p>
           ) : null}
+          <p className="mt-1 text-xs text-muted">{t('insights.aiLabelNote')}</p>
         </div>
         <button type="button" className="btn-primary" onClick={generate} disabled={generating || !runId || selected?.status !== 'completed'}>
-          {generating ? 'Generating…' : 'Generate Content Ideas'}
+          {generating ? t('insights.generating') : t('insights.generate')}
         </button>
         {selected && selected.status !== 'completed' ? (
-          <p className="w-full text-xs text-muted">Ideas are available after the run completes.</p>
+          <p className="w-full text-xs text-muted">{t('insights.ideasAfterComplete')}</p>
         ) : null}
       </div>
 
       {projectError || error ? <p className="error-banner">{projectError || error}</p> : null}
 
       <label className="block max-w-xl text-sm">
-        <span className="mb-1 block text-muted">Run</span>
+        <span className="mb-1 block text-muted">{t('insights.run')}</span>
         <select
           className="field"
           value={runId}
           onChange={(event) => writeRun(event.target.value)}
           disabled={runs.length === 0}
         >
-          {runs.length === 0 ? <option value="">No runs</option> : null}
+          {runs.length === 0 ? <option value="">{t('insights.noRuns')}</option> : null}
           {runs.map((run) => (
             <option key={run.id} value={run.id}>{run.topic}</option>
           ))}
@@ -260,8 +262,8 @@ export default function InsightsHome() {
 
       {!loading && runs.length === 0 ? (
         <section className="panel p-6">
-          <h2 className="text-base font-semibold">Nothing to summarize</h2>
-          <p className="mt-2 text-sm text-muted">Complete a research run and the six insight blocks will land here.</p>
+          <h2 className="text-base font-semibold">{t('insights.emptyTitle')}</h2>
+          <p className="mt-2 text-sm text-muted">{t('insights.emptyBody')}</p>
         </section>
       ) : null}
 
@@ -272,26 +274,26 @@ export default function InsightsHome() {
           <ScraperNote note={note} />
           <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Videos</dt>
+              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('insights.stat.videos')}</dt>
               <dd className="mt-1 font-mono">{videos.length}</dd>
             </div>
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Analyzed</dt>
+              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('insights.stat.analyzed')}</dt>
               <dd className="mt-1 font-mono">{analyzed}</dd>
             </div>
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Finished</dt>
+              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('insights.stat.finished')}</dt>
               <dd className="mt-1">{formatTime(selected.completed_at)}</dd>
             </div>
             <div>
-              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Started</dt>
+              <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('insights.stat.started')}</dt>
               <dd className="mt-1">{formatTime(selected.created_at)}</dd>
             </div>
           </dl>
         </section>
       ) : null}
 
-      {loading ? <p className="text-sm text-muted">Loading insights…</p> : null}
+      {loading ? <p className="text-sm text-muted">{t('insights.loading')}</p> : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
         {sections.map((section) => (
@@ -306,8 +308,8 @@ export default function InsightsHome() {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">High Potential Videos</h2>
-        {highPotential.length === 0 && !loading ? <p className="text-sm text-muted">No video in this run cleared the high-potential bar.</p> : null}
+        <h2 className="text-sm font-semibold">{t('insights.highPotential')}</h2>
+        {highPotential.length === 0 && !loading ? <p className="text-sm text-muted">{t('insights.highPotentialEmpty')}</p> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {highPotential.map((video) => (
             <Link
@@ -322,8 +324,8 @@ export default function InsightsHome() {
                 <span className="block h-24 w-16 shrink-0 rounded" style={{ background: 'var(--surface)' }} />
               )}
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{video.author_handle ? `@${video.author_handle}` : 'Unknown author'}</span>
-                <span className="mt-1 block text-xs text-muted">Views {formatCount(video.views)} · Likes {formatCount(video.likes)}</span>
+                <span className="block truncate text-sm font-medium">{video.author_handle ? `@${video.author_handle}` : t('feed.unknownAuthor')}</span>
+                <span className="mt-1 block text-xs text-muted">{t('insights.views')} {formatCount(video.views)} · {t('insights.likes')} {formatCount(video.likes)}</span>
                 <span className="mt-2 block"><ScoreBadge score={video.viral_score} high={video.is_high_potential} /></span>
                 <span className="mt-2 block text-sm" style={{ color: 'var(--text-secondary)' }}>{video.hook || '—'}</span>
               </span>
@@ -333,7 +335,7 @@ export default function InsightsHome() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Content ideas</h2>
+        <h2 className="text-sm font-semibold">{t('insights.contentIdeas')}</h2>
         <IdeaList ideas={ideas} />
       </section>
     </div>

@@ -5,6 +5,7 @@ import MetricPill from './MetricPill';
 import ScoreBadge from './ScoreBadge';
 import { formatCount, humanize, providerLabel } from '@/lib/client/format';
 import { isOffTopic } from '@/lib/research/relevance';
+import { t } from '@/lib/i18n';
 
 export interface FeedVideo {
   id: string;
@@ -99,7 +100,7 @@ function SlideMedia({ video, mountEmbed, active }: { video: FeedVideo; mountEmbe
     return (
       <iframe
         src={embed}
-        title={video.caption || 'Embedded video'}
+        title={video.caption || t('feed.embeddedVideo')}
         className="h-full w-full border-0 bg-black"
         allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
         allowFullScreen
@@ -114,11 +115,11 @@ function SlideMedia({ video, mountEmbed, active }: { video: FeedVideo; mountEmbe
         // eslint-disable-next-line @next/next/no-img-element
         <img src={video.thumbnail_url} alt="" className="h-full w-full object-cover" />
       ) : (
-        <div className="flex h-full items-center justify-center text-sm text-muted">No preview</div>
+        <div className="flex h-full items-center justify-center text-sm text-muted">{t('feed.noPreview')}</div>
       )}
       {video.url ? (
         <a className="btn-primary absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" href={video.url} target="_blank" rel="noreferrer">
-          Open Original
+          {t('feed.openOriginal')}
         </a>
       ) : null}
     </div>
@@ -132,47 +133,47 @@ function AnalysisDetails({ video }: { video: FeedVideo }) {
       {video.caption ? <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{video.caption}</p> : null}
       <dl className="space-y-2 text-sm">
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Hook</dt>
+          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('feed.field.hook')}</dt>
           <dd>{textOrDash(video.hook)}</dd>
         </div>
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Pain point</dt>
+          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('feed.field.painPoint')}</dt>
           <dd>{video.pain_point ? humanize(video.pain_point) : '—'}</dd>
         </div>
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Content structure</dt>
+          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('feed.field.contentStructure')}</dt>
           <dd>{video.content_structure ? humanize(video.content_structure) : '—'}</dd>
         </div>
         <div>
-          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">Viral hypothesis</dt>
+          <dt className="text-[11px] uppercase tracking-[0.08em] text-muted">{t('feed.field.viralHypothesis')}</dt>
           <dd>{textOrDash(video.viral_hypothesis)}</dd>
         </div>
       </dl>
       <button type="button" className="btn-ghost" onClick={() => setOpen((value) => !value)}>
-        {open ? 'Hide detail' : 'More analysis'}
+        {open ? t('feed.hideDetail') : t('feed.moreAnalysis')}
       </button>
       {open ? (
         <dl className="space-y-2 text-sm">
-          <div><dt className="text-muted">Audience</dt><dd>{textOrDash(video.audience)}</dd></div>
-          <div><dt className="text-muted">Emotion</dt><dd>{video.emotion ? humanize(video.emotion) : '—'}</dd></div>
-          <div><dt className="text-muted">Topic</dt><dd>{video.topic ? humanize(video.topic) : '—'}</dd></div>
-          <div><dt className="text-muted">Reusable pattern</dt><dd>{textOrDash(video.reusable_pattern)}</dd></div>
-          <div><dt className="text-muted">Replicability</dt><dd>{textOrDash(video.replicability)}</dd></div>
-          <div><dt className="text-muted">Relevance</dt><dd>{textOrDash(video.relevance)}</dd></div>
-          <div><dt className="text-muted">Relevance reason</dt><dd>{textOrDash(video.relevance_reason)}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.audience')}</dt><dd>{textOrDash(video.audience)}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.emotion')}</dt><dd>{video.emotion ? humanize(video.emotion) : '—'}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.topic')}</dt><dd>{video.topic ? humanize(video.topic) : '—'}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.reusablePattern')}</dt><dd>{textOrDash(video.reusable_pattern)}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.replicability')}</dt><dd>{textOrDash(video.replicability)}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.relevance')}</dt><dd>{textOrDash(video.relevance)}</dd></div>
+          <div><dt className="text-muted">{t('feed.field.relevanceReason')}</dt><dd>{textOrDash(video.relevance_reason)}</dd></div>
         </dl>
       ) : null}
       {video.url ? (
-        <a className="btn-ghost" href={video.url} target="_blank" rel="noreferrer">Open Original</a>
+        <a className="btn-ghost" href={video.url} target="_blank" rel="noreferrer">{t('feed.openOriginal')}</a>
       ) : (
-        <p className="text-xs text-muted">No original URL</p>
+        <p className="text-xs text-muted">{t('feed.noOriginalUrl')}</p>
       )}
     </div>
   );
 }
 
 function Analysis({ video, provider }: { video: FeedVideo; provider: string | null }) {
-  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || 'Unknown author');
+  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || t('feed.unknownAuthor'));
   return (
     <div className="space-y-4 break-words">
       <div>
@@ -185,18 +186,18 @@ function Analysis({ video, provider }: { video: FeedVideo; provider: string | nu
           </div>
           <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
         </div>
-        {isOffTopic(video.relevance) ? <div className="mt-2"><span className="off-topic-chip">Off-topic</span></div> : null}
+        {isOffTopic(video.relevance) ? <div className="mt-2"><span className="off-topic-chip">{t('feed.offTopic')}</span></div> : null}
         <div className="mt-2">
-          <MetricPill label="Followers" value={video.author_followers} />
+          <MetricPill label={t('feed.followers')} value={video.author_followers} />
         </div>
         <p className="provider-label mt-2">{providerLabel(provider)}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <MetricPill label="Views" value={video.views} />
-        <MetricPill label="Likes" value={video.likes} />
-        <MetricPill label="Comments" value={video.comments} />
-        <MetricPill label="Shares" value={video.shares} />
-        <MetricPill label="Saves" value={video.saves} />
+        <MetricPill label={t('feed.views')} value={video.views} />
+        <MetricPill label={t('feed.likes')} value={video.likes} />
+        <MetricPill label={t('feed.comments')} value={video.comments} />
+        <MetricPill label={t('feed.shares')} value={video.shares} />
+        <MetricPill label={t('feed.saves')} value={video.saves} />
       </div>
       <AnalysisDetails video={video} />
     </div>
@@ -302,7 +303,7 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Open Original
+                      {t('feed.openOriginal')}
                     </a>
                   ) : null}
                 </div>
@@ -322,7 +323,7 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
 
 function MobileChrome({ video, provider }: { video: FeedVideo; provider: string | null }) {
   const [open, setOpen] = useState(false);
-  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || 'Unknown author');
+  const handle = video.author_handle ? `@${video.author_handle}` : (video.author_name || t('feed.unknownAuthor'));
   return (
     <div
       className="shrink-0 border-t md:hidden"
@@ -337,18 +338,18 @@ function MobileChrome({ video, provider }: { video: FeedVideo; provider: string 
           <ScoreBadge score={video.viral_score} high={Boolean(video.is_high_potential)} />
         </div>
         <p className="text-[12px] leading-5">
-          <span className="text-muted">Views </span>{formatCount(video.views)}
-          <span className="text-muted"> · Likes </span>{formatCount(video.likes)}
-          <span className="text-muted"> · Comments </span>{formatCount(video.comments)}
-          <span className="text-muted"> · Shares </span>{formatCount(video.shares)}
-          <span className="text-muted"> · Saves </span>{formatCount(video.saves)}
+          <span className="text-muted">{t('feed.views')} </span>{formatCount(video.views)}
+          <span className="text-muted"> · {t('feed.likes')} </span>{formatCount(video.likes)}
+          <span className="text-muted"> · {t('feed.comments')} </span>{formatCount(video.comments)}
+          <span className="text-muted"> · {t('feed.shares')} </span>{formatCount(video.shares)}
+          <span className="text-muted"> · {t('feed.saves')} </span>{formatCount(video.saves)}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {video.is_high_potential ? <span className="off-topic-chip" style={{ color: '#dfe3ff', borderColor: 'rgba(139, 147, 255, 0.5)', background: 'rgba(139, 147, 255, 0.16)' }}>High Potential</span> : null}
-          {isOffTopic(video.relevance) ? <span className="off-topic-chip">Off-topic</span> : null}
+          {video.is_high_potential ? <span className="off-topic-chip" style={{ color: '#dfe3ff', borderColor: 'rgba(139, 147, 255, 0.5)', background: 'rgba(139, 147, 255, 0.16)' }}>{t('feed.highPotential')}</span> : null}
+          {isOffTopic(video.relevance) ? <span className="off-topic-chip">{t('feed.offTopic')}</span> : null}
           <span className="provider-label">{providerLabel(provider)}</span>
           <button type="button" className="menu-button ml-auto" onClick={() => setOpen((value) => !value)}>
-            {open ? 'Hide analysis' : 'Analysis'}
+            {open ? t('feed.hideAnalysis') : t('feed.analysis')}
           </button>
         </div>
       </div>

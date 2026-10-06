@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { BRAND } from '@/lib/brand';
+import { t } from '@/lib/i18n';
 
 function safeNext(value: string | null): string {
   if (!value) return '/';
@@ -38,14 +39,14 @@ export default function LoginPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(typeof data.error === 'string' ? data.error : 'Could not sign in');
+        setError(typeof data.error === 'string' ? data.error : t('login.error'));
         setLoading(false);
         return;
       }
       const next = safeNext(new URLSearchParams(window.location.search).get('next'));
       window.location.href = next;
     } catch {
-      setError('Could not sign in');
+      setError(t('login.error'));
       setLoading(false);
     }
   }
@@ -55,14 +56,14 @@ export default function LoginPage() {
       <div className="w-full max-w-[380px]">
         <div className="mb-8">
           <h1 className="font-heading text-xl">{BRAND.name}</h1>
-          <p className="mt-2 text-sm text-muted">Sign in to the research desk.</p>
+          <p className="mt-2 text-sm text-muted">{t('login.subtitle')}</p>
         </div>
         <form onSubmit={handleLogin} className="panel space-y-3 p-5">
           <input
             type="email"
             name="email"
             autoComplete="username"
-            placeholder="Email"
+            placeholder={t('login.email')}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
@@ -72,7 +73,7 @@ export default function LoginPage() {
             type="password"
             name="password"
             autoComplete="current-password"
-            placeholder="Password"
+            placeholder={t('login.password')}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
@@ -80,7 +81,7 @@ export default function LoginPage() {
           />
           {error ? <p className="text-sm text-red">{error}</p> : null}
           <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('login.submitting') : t('login.submit')}
           </button>
         </form>
       </div>

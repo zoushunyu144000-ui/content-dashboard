@@ -6,6 +6,7 @@ import FeedViewer, { type FeedVideo } from '@/components/FeedViewer';
 import ScraperNote from '@/components/ScraperNote';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
+import { t } from '@/lib/i18n';
 
 interface RunRow {
   id: string;
@@ -62,7 +63,7 @@ export default function FeedHome() {
       })
       .catch((err: Error) => {
         if (!cancelled) {
-          setError(err.message || 'Could not load runs');
+          setError(err.message || t('research.loadRunsError'));
           setLoading(false);
         }
       });
@@ -85,7 +86,7 @@ export default function FeedHome() {
         setVideos(data.videos || []);
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message || 'Could not load videos');
+        if (!cancelled) setError(err.message || t('feed.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -103,19 +104,19 @@ export default function FeedHome() {
           <ScraperNote note={note} />
         </div>
       ) : null}
-      {loading ? <p className="px-4 pt-16 text-sm text-muted">Loading the feed…</p> : null}
+      {loading ? <p className="px-4 pt-16 text-sm text-muted">{t('feed.loading')}</p> : null}
       {!loading && !error && !runId ? (
         <div className="px-4 pt-16">
-          <h1 className="text-lg font-semibold">No completed research</h1>
+          <h1 className="text-lg font-semibold">{t('feed.noCompletedTitle')}</h1>
           <p className="mt-2 max-w-md text-sm text-muted">
-            Finish a run for {project?.name || 'this project'} and the feed will open on its videos.
+            {t('feed.noCompletedBody', { name: project?.name || t('dashboard.thisProject') })}
           </p>
         </div>
       ) : null}
       {!loading && runId && videos.length === 0 && !error ? (
         <div className="px-4 pt-16">
-          <h1 className="text-lg font-semibold">{topic || 'This run'}</h1>
-          <p className="mt-2 text-sm text-muted">No videos were saved for this run.</p>
+          <h1 className="text-lg font-semibold">{topic || t('feed.thisRun')}</h1>
+          <p className="mt-2 text-sm text-muted">{t('feed.noVideos')}</p>
         </div>
       ) : null}
       {videos.length > 0 ? (

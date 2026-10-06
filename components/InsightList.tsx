@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { humanize, percentPoints } from '@/lib/client/format';
+import { t } from '@/lib/i18n';
 
 export interface InsightExample {
   id: string;
@@ -32,7 +33,7 @@ export default function InsightList({ title, items, runId, projectId }: InsightL
   return (
     <section className="panel p-4">
       <h2 className="text-sm font-semibold">{title}</h2>
-      {items.length === 0 ? <p className="mt-3 text-sm text-muted">None for this run.</p> : null}
+      {items.length === 0 ? <p className="mt-3 text-sm text-muted">{t('insights.noneForRun')}</p> : null}
       <ul className="mt-3 space-y-3">
         {items.map((item) => {
           const points = percentPoints(item.percent);
@@ -51,8 +52,8 @@ export default function InsightList({ title, items, runId, projectId }: InsightL
               </button>
               {expanded ? (
                 <div className="mt-2 space-y-2 text-sm">
-                  <p style={{ color: 'var(--text-secondary)' }}>{item.summary || 'No summary for this group.'}</p>
-                  {(item.examples || []).length === 0 ? <p className="text-xs text-muted">No example videos linked.</p> : null}
+                  <p style={{ color: 'var(--text-secondary)' }}>{item.summary || t('insights.noSummary')}</p>
+                  {(item.examples || []).length === 0 ? <p className="text-xs text-muted">{t('insights.noExamples')}</p> : null}
                   <ul className="space-y-2">
                     {(item.examples || []).map((example) => (
                       <li key={example.id}>
@@ -67,8 +68,8 @@ export default function InsightList({ title, items, runId, projectId }: InsightL
                             <span className="block h-14 w-10 rounded" style={{ background: 'var(--surface)' }} />
                           )}
                           <span className="min-w-0">
-                            <span className="block truncate text-sm">{example.author_handle ? `@${example.author_handle}` : 'Video'}</span>
-                            <span className="block truncate text-xs text-muted">{example.caption || 'Open in the feed'}</span>
+                            <span className="block truncate text-sm">{example.author_handle ? `@${example.author_handle}` : t('insights.video')}</span>
+                            <span className="block truncate text-xs text-muted">{example.caption || t('insights.openInFeed')}</span>
                           </span>
                         </Link>
                       </li>

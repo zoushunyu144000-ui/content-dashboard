@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+
 export class ApiError extends Error {
   status: number;
 
@@ -16,11 +18,11 @@ export async function api<T>(input: string, init?: RequestInit): Promise<T> {
       const next = `${window.location.pathname}${window.location.search}`;
       window.location.href = `/login?next=${encodeURIComponent(next)}`;
     }
-    throw new ApiError('Sign in required', 401);
+    throw new ApiError(t('api.signInRequired'), 401);
   }
   const data = await response.json().catch(() => ({} as { error?: unknown }));
   if (!response.ok) {
-    const message = typeof data.error === 'string' ? data.error : `Request failed (${response.status})`;
+    const message = typeof data.error === 'string' ? data.error : t('api.requestFailed', { status: response.status });
     throw new ApiError(message, response.status);
   }
   return data as T;

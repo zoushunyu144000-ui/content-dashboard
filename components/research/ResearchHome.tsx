@@ -8,6 +8,7 @@ import ScraperNote from '@/components/ScraperNote';
 import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatTime, providerLabel, stepLabel } from '@/lib/client/format';
+import { t } from '@/lib/i18n';
 
 interface RunListItem {
   id: string;
@@ -74,7 +75,7 @@ export default function ResearchHome() {
         setRunId(requested && list.some((item) => item.id === requested) ? requested : '');
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message || 'Could not load runs');
+        if (!cancelled) setError(err.message || t('research.loadRunsError'));
       })
       .finally(() => {
         if (!cancelled) setLoadingRuns(false);
@@ -114,7 +115,7 @@ export default function ResearchHome() {
         )));
         if (!TERMINAL.has(data.run.status)) timer = window.setTimeout(tick, 2500);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load this run');
+        if (!cancelled) setError(err instanceof Error ? err.message : t('research.loadRunError'));
       }
     }
     tick();
@@ -137,12 +138,12 @@ export default function ResearchHome() {
         body: JSON.stringify({ projectId: project.id, topic: topic.trim() }),
       });
       setTopic('');
-      if (data.existing) setNotice('A research run is already in progress for this project.');
+      if (data.existing) setNotice(t('research.alreadyRunning'));
       const list = await api<{ runs: RunListItem[] }>(`/api/research/runs?projectId=${encodeURIComponent(project.id)}`);
       setRuns(list.runs || []);
       selectRun(data.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start research');
+      setError(err instanceof Error ? err.message : t('research.startError'));
     } finally {
       setBusy(false);
     }
@@ -159,13 +160,13 @@ export default function ResearchHome() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: project.id, topic: failedTopic.trim() }),
       });
-      if (data.existing) setNotice('A research run is already in progress for this project.');
+      if (data.existing) setNotice(t('research.alreadyRunning'));
       const list = await api<{ runs: RunListItem[] }>(`/api/research/runs?projectId=${encodeURIComponent(project.id)}`);
       setRuns(list.runs || []);
       selectRun(data.id);
       setPollKey((value) => value + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not retry this run');
+      setError(err instanceof Error ? err.message : t('research.retryError'));
     } finally {
       setBusy(false);
     }
@@ -177,22 +178,22 @@ export default function ResearchHome() {
       await api(`/api/research/runs/${id}/cancel`, { method: 'POST' });
       setPollKey((value) => value + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not cancel the run');
+      setError(err instanceof Error ? err.message : t('research.cancelError'));
     }
   }
 
   const projectQuery = project ? `project=${encodeURIComponent(project.id)}` : '';
   const platforms = PLATFORMS.map((item) => (
     item.id === 'shorts' && !youtubeEnabled
-      ? { ...item, label: 'YouTube Shorts (unavailable on this server)', enabled: false, reason: '' }
-      : { ...item, reason: item.enabled ? '' : 'coming soon' }
+      ? { ...item, label: t('research.shortsUnavailable'), enabled: false, reason: '' }
+      : { ...item, reason: item.enabled ? '' : t('research.comingSoon') }
   ));
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading text-2xl">Research</h1>
-        <p className="mt-1 text-sm text-muted">One topic. TikTok first. The pipeline falls back across scrapers on its own.</p>
+        <h1 className="font-heading text-2xl">{t('research.title')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('research.subtitle')}</p>
       </div>
 
       {projectError || error ? <p className="error-banner">{projectError || error}</p> : null}
@@ -200,30 +201,30 @@ export default function ResearchHome() {
 
       <form onSubmit={onSubmit} className="panel grid gap-4 p-4">
         <label className="block text-sm">
-          <span className="mb-1 block text-muted">Project</span>
+          <span className="mb-1 block text-muted">{t('project.label')}</span>
           <select
             value={project?.id || ''}
             onChange={(event) => setProjectId(event.target.value)}
             className="field"
             disabled={projectLoading || projects.length === 0}
           >
-            {projects.length === 0 ? <option value="">No projects</option> : null}
+            {projects.length === 0 ? <option value="">{t('project.none')}</option> : null}
             {projects.map((item) => (
               <option key={item.id} value={item.id}>{item.name}</option>
             ))}
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-muted">Topic</span>
+          <span className="mb-1 block text-muted">{t('research.topic')}</span>
           <input
             value={topic}
             onChange={(event) => setTopic(event.target.value)}
             className="field"
-            placeholder="web design for small businesses"
+            placeholder={t('research.topicPlaceholder')}
           />
         </label>
         <fieldset>
-          <legend className="mb-2 text-sm text-muted">Platform</legend>
+          <legend className="mb-2 text-sm text-muted">{t('research.platform')}</legend>
           <div className="grid grid-cols-2 gap-2">
             {platforms.map((item) => (
               <label
@@ -248,34 +249,34 @@ export default function ResearchHome() {
           </div>
         </fieldset>
         <button type="submit" className="btn-primary" disabled={busy || !project || !topic.trim()}>
-          {busy ? 'Starting…' : 'Start'}
+          {busy ? t('research.starting') : t('research.start')}
         </button>
       </form>
 
       {run ? <ResearchProgress run={run} events={events} /> : (
-        <p className="text-sm text-muted">{loadingRuns ? 'Loading runs…' : 'Start a topic, or pick a run below, to watch the pipeline.'}</p>
+        <p className="text-sm text-muted">{loadingRuns ? t('research.loadingRuns') : t('research.watchHint')}</p>
       )}
 
       {run?.status === 'failed' ? (
         <button type="button" className="btn-primary" disabled={busy || !project} onClick={() => retry(run.topic)}>
-          {busy ? 'Starting…' : 'Retry'}
+          {busy ? t('research.starting') : t('research.retry')}
         </button>
       ) : null}
 
       {run?.status === 'completed' && project ? (
         <div className="flex flex-wrap gap-2">
-          <Link className="btn-primary" href={`/feed?${projectQuery}&run=${encodeURIComponent(run.id)}`}>Open Feed</Link>
-          <Link className="btn-ghost" href={`/insights?${projectQuery}&run=${encodeURIComponent(run.id)}`}>Open Insights</Link>
+          <Link className="btn-primary" href={`/feed?${projectQuery}&run=${encodeURIComponent(run.id)}`}>{t('research.openFeed')}</Link>
+          <Link className="btn-ghost" href={`/insights?${projectQuery}&run=${encodeURIComponent(run.id)}`}>{t('research.openInsights')}</Link>
         </div>
       ) : null}
 
       {run && !TERMINAL.has(run.status) ? (
-        <button type="button" className="btn-ghost" onClick={() => cancel(run.id)}>Cancel run</button>
+        <button type="button" className="btn-ghost" onClick={() => cancel(run.id)}>{t('research.cancel')}</button>
       ) : null}
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">History</h2>
-        {!loadingRuns && runs.length === 0 ? <p className="text-sm text-muted">No runs for this project yet.</p> : null}
+        <h2 className="text-sm font-semibold">{t('research.history')}</h2>
+        {!loadingRuns && runs.length === 0 ? <p className="text-sm text-muted">{t('research.noRuns')}</p> : null}
         {runs.map((item) => (
           <article
             key={item.id}

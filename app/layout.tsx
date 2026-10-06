@@ -30,7 +30,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: BRAND.name,
-  description: `${BRAND.name} research dashboard`,
+  description: `${BRAND.name} 研究台`,
 };
 
 export default function RootLayout({
@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistHeading.variable} ${geistBody.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="zh-CN" className={`${geistHeading.variable} ${geistBody.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="font-body antialiased">
         <ThemeProvider>
           <GlobalFeatures />

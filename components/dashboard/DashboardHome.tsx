@@ -9,6 +9,7 @@ import { useProject } from '@/components/ProjectProvider';
 import { api } from '@/lib/client/api';
 import { formatTime, humanize, percentPoints, providerLabel, stepLabel } from '@/lib/client/format';
 import { isOffTopic } from '@/lib/research/relevance';
+import { t } from '@/lib/i18n';
 
 interface RunRow {
   id: string;
@@ -46,7 +47,7 @@ function InsightPreview({ title, items }: { title: string; items: InsightItem[] 
   return (
     <section className="panel p-4">
       <h2 className="text-sm font-semibold">{title}</h2>
-      {rows.length === 0 ? <p className="mt-3 text-sm text-muted">Nothing clustered yet.</p> : null}
+      {rows.length === 0 ? <p className="mt-3 text-sm text-muted">{t('dashboard.nothingClustered')}</p> : null}
       <ul className="mt-3 space-y-3">
         {rows.map((item) => {
           const points = percentPoints(item.percent);
@@ -105,7 +106,7 @@ export default function DashboardHome() {
         setHooks(insights.top_hooks || []);
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message || 'Could not load the dashboard');
+        if (!cancelled) setError(err.message || t('dashboard.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -125,39 +126,39 @@ export default function DashboardHome() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">{project?.name || 'Choose a project'}</p>
+          <h1 className="font-heading text-2xl">{t('dashboard.title')}</h1>
+          <p className="mt-1 text-sm text-muted">{project?.name || t('project.choose')}</p>
         </div>
         <Link
           href={project ? `/research?${projectQuery}` : '/research'}
           className="btn-primary"
         >
-          New Research
+          {t('dashboard.newResearch')}
         </Link>
       </div>
 
       {projectError || error ? <p className="error-banner">{projectError || error}</p> : null}
-      {loading ? <p className="text-sm text-muted">Loading this project…</p> : null}
+      {loading ? <p className="text-sm text-muted">{t('dashboard.loading')}</p> : null}
 
       {!loading && !error && runs.length === 0 ? (
         <section className="panel p-6">
-          <h2 className="text-base font-semibold">No research yet</h2>
+          <h2 className="text-base font-semibold">{t('dashboard.emptyTitle')}</h2>
           <p className="mt-2 max-w-lg text-sm text-muted">
-            Start a topic for {project?.name || 'this project'}. Completed runs will show video counts, pain points, and hooks here.
+            {t('dashboard.emptyBody', { name: project?.name || t('dashboard.thisProject') })}
           </p>
         </section>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatBox label="Videos" value={completed ? String(videos.length) : '—'} />
-        <StatBox label="Analyzed" value={completed ? String(analyzed) : '—'} />
-        <StatBox label="High potential" value={completed ? String(highPotential) : '—'} />
-        <StatBox label="Latest completed" value={completed ? formatTime(completed.completed_at) : '—'} />
+        <StatBox label={t('dashboard.stat.videos')} value={completed ? String(videos.length) : '—'} />
+        <StatBox label={t('dashboard.stat.analyzed')} value={completed ? String(analyzed) : '—'} />
+        <StatBox label={t('dashboard.stat.highPotential')} value={completed ? String(highPotential) : '—'} />
+        <StatBox label={t('dashboard.stat.latestCompleted')} value={completed ? formatTime(completed.completed_at) : '—'} />
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Recent runs</h2>
-        {recent.length === 0 && !loading ? <p className="text-sm text-muted">Runs will appear here after you start research.</p> : null}
+        <h2 className="text-sm font-semibold">{t('dashboard.recentRuns')}</h2>
+        {recent.length === 0 && !loading ? <p className="text-sm text-muted">{t('dashboard.recentEmpty')}</p> : null}
         <div className="space-y-2">
           {recent.map((run) => (
             <Link
@@ -186,8 +187,8 @@ export default function DashboardHome() {
       </section>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <InsightPreview title="Top pain points" items={pain} />
-        <InsightPreview title="Top hooks" items={hooks} />
+        <InsightPreview title={t('dashboard.topPainPoints')} items={pain} />
+        <InsightPreview title={t('dashboard.topHooks')} items={hooks} />
       </div>
     </div>
   );

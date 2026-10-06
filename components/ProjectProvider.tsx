@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/client/api';
+import { t } from '@/lib/i18n';
 
 export interface ProjectOption {
   id: string;
@@ -74,7 +75,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err.message || 'Could not load projects');
+        if (!cancelled) setError(err.message || t('project.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

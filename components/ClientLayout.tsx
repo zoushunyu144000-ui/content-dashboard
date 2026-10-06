@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import { ProjectProvider } from './ProjectProvider';
 import { usePageAccess } from '@/lib/usePageAccess';
 import { BRAND } from '@/lib/brand';
+import { t } from '@/lib/i18n';
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,10 +28,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           type="button"
           className="menu-button fixed left-3 top-3 z-[70]"
           onClick={() => setOpen((value) => !value)}
-          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-label={open ? t('nav.closeMenu') : t('nav.openMenu')}
           aria-expanded={open}
         >
-          {open ? 'Close' : 'Menu'}
+          {open ? t('nav.close') : t('nav.menu')}
         </button>
       ) : (
         <header className="shell-top md:hidden">
@@ -38,10 +39,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             type="button"
             className="menu-button"
             onClick={() => setOpen((value) => !value)}
-            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-label={open ? t('nav.closeMenu') : t('nav.openMenu')}
             aria-expanded={open}
           >
-            {open ? 'Close' : 'Menu'}
+            {open ? t('nav.close') : t('nav.menu')}
           </button>
           <span className="truncate text-[13px] font-medium">{BRAND.name}</span>
         </header>
@@ -49,7 +50,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       {open ? (
         <button
           type="button"
-          aria-label="Close menu"
+          aria-label={t('nav.closeMenu')}
           className="fixed inset-0 z-40 bg-black/60"
           onClick={() => setOpen(false)}
         />

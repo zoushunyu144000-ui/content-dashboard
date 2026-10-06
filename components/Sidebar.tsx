@@ -3,22 +3,23 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { BRAND } from '@/lib/brand';
+import { t } from '@/lib/i18n';
 import ProjectSwitcher from './ProjectSwitcher';
 import { useProject } from './ProjectProvider';
 
 const NAV = [
   {
-    label: '',
+    labelKey: '' as const,
     items: [
-      { href: '/', label: 'Dashboard' },
+      { href: '/', labelKey: 'nav.dashboard' as const },
     ],
   },
   {
-    label: 'INTELLIGENCE',
+    labelKey: 'nav.intelligence' as const,
     items: [
-      { href: '/research', label: 'Research' },
-      { href: '/feed', label: 'Feed' },
-      { href: '/insights', label: 'Insights' },
+      { href: '/research', labelKey: 'nav.research' as const },
+      { href: '/feed', labelKey: 'nav.feed' as const },
+      { href: '/insights', labelKey: 'nav.insights' as const },
     ],
   },
 ];
@@ -62,17 +63,17 @@ export default function Sidebar({ userEmail = '', open = false, overlay = false,
         <div className="text-[13px] font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>
           {BRAND.name}
         </div>
-        <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>Research</div>
+        <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('brand.subtitle')}</div>
       </div>
       <div className="px-3 pb-4">
         <ProjectSwitcher />
       </div>
       <div className="flex-1 space-y-5 overflow-y-auto px-3">
         {NAV.map((section) => (
-          <div key={section.label || 'root'}>
-            {section.label ? (
+          <div key={section.labelKey || 'root'}>
+            {section.labelKey ? (
               <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[1.5px] text-muted">
-                {section.label}
+                {t(section.labelKey)}
               </div>
             ) : null}
             <div className="flex flex-col gap-0.5">
@@ -85,7 +86,7 @@ export default function Sidebar({ userEmail = '', open = false, overlay = false,
                     onClick={onNavigate}
                     className={`rounded-lg px-3 py-2 text-[13px] font-medium ${active ? 'nav-active' : 'nav-idle'}`}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </Link>
                 );
               })}
@@ -95,10 +96,10 @@ export default function Sidebar({ userEmail = '', open = false, overlay = false,
       </div>
       <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border)' }}>
         <div className="truncate text-[12px]" style={{ color: 'var(--text-secondary)' }} title={userEmail}>
-          {userEmail || 'Signed in'}
+          {userEmail || t('nav.signedIn')}
         </div>
         <button type="button" onClick={handleLogout} className="mt-2 text-[12px] text-muted hover:text-cream">
-          Sign out
+          {t('nav.signOut')}
         </button>
       </div>
     </nav>

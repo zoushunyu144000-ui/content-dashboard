@@ -1,6 +1,7 @@
 import ProgressBar from './ProgressBar';
 import ScraperNote from './ScraperNote';
 import { formatTime, providerLabel, stepLabel } from '@/lib/client/format';
+import { t } from '@/lib/i18n';
 
 const STEPS = [
   'created',
@@ -53,7 +54,7 @@ export default function ResearchProgress({ run, events }: ResearchProgressProps)
         </div>
         <div className="text-right">
           <div className="font-mono text-sm">{Math.round(Number(run.progress) || 0)}%</div>
-          <div className="text-xs capitalize text-muted">{stepLabel(run.status)}</div>
+          <div className="text-xs text-muted">{stepLabel(run.status)}</div>
         </div>
       </div>
       <ScraperNote note={run.scraper_note} />
@@ -70,13 +71,13 @@ export default function ResearchProgress({ run, events }: ResearchProgressProps)
         })}
       </ol>
       <p className="text-xs text-muted">
-        Current step: {stepLabel(run.current_step || run.status)}
-        {run.completed_at ? ` · Finished ${formatTime(run.completed_at)}` : ''}
+        {t('research.currentStep')}: {stepLabel(run.current_step || run.status)}
+        {run.completed_at ? ` · ${t('research.finished')} ${formatTime(run.completed_at)}` : ''}
       </p>
       {run.error_message ? <p className="error-banner">{run.error_message}</p> : null}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Recent events</h3>
-        {events.length === 0 ? <p className="mt-2 text-sm text-muted">No events yet.</p> : null}
+        <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">{t('research.recentEvents')}</h3>
+        {events.length === 0 ? <p className="mt-2 text-sm text-muted">{t('research.noEvents')}</p> : null}
         <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
           {events.slice(0, 12).map((event) => (
             <li key={event.id} className="text-sm">
