@@ -795,7 +795,7 @@ async function insertAnalysis(
   `;
 }
 
-async function cluster(sql: Sql, run: RunRow): Promise<string> {
+async function cluster(sql: Sql, run: RunRow, options?: { preserveStatus?: boolean }): Promise<string> {
   const analyses = await sql<
     { video_id: string; pain_point: string | null; hook_type: string | null; emotion: string | null; topic: string | null; content_structure: string | null }[]
   >`
@@ -894,16 +894,18 @@ async function cluster(sql: Sql, run: RunRow): Promise<string> {
     `Insight merge ${MERGE_PROMPT_VERSION} (${method}) mapped ${buckets.size} labels into ${finalized.groups.length} groups`,
   );
 
-  await sql`
-    update research_runs
-    set status = 'generating_insights', current_step = 'generating_insights', progress = 95,
-        run_after = null, locked_at = null, locked_by = null
-    where id = ${run.id}
-  `;
+  if (!options?.preserveStatus) {
+    await sql`
+      update research_runs
+      set status = 'generating_insights', current_step = 'generating_insights', progress = 95,
+          run_after = null, locked_at = null, locked_by = null
+      where id = ${run.id}
+    `;
+  }
   return 'generating_insights';
 }
 
-async function writeInsights(sql: Sql, run: RunRow): Promise<string> {
+async function writeInsights(sql: Sql, run: RunRow, options?: { preserveStatus?: boolean }): Promise<string> {
   const clusters = await sql<
     { id: string; kind: string; label: string; video_count: number; percent: unknown }[]
   >`
@@ -938,6 +940,15 @@ async function writeInsights(sql: Sql, run: RunRow): Promise<string> {
     top_emotions: pack('emotion'),
     emerging_topics: pack('topic'),
   };
+  if (options?.preserveStatus) {
+    await sql`
+      update research_runs
+      set insights = ${sql.json(insights as never)}
+      where id = ${run.id}
+    `;
+    await event(sql, run.id, 'completed', `Reclustered insights (${MERGE_PROMPT_VERSION})`);
+    return 'completed';
+  }
   await sql`
     update research_runs
     set status = 'completed', current_step = 'completed', progress = 100,
@@ -947,6 +958,35 @@ async function writeInsights(sql: Sql, run: RunRow): Promise<string> {
   `;
   await event(sql, run.id, 'completed', 'Research run completed');
   return 'completed';
+}
+
+export class ReclusterError extends Error {
+  readonly code: 'not_found' | 'not_completed';
+
+  constructor(code: 'not_found' | 'not_completed') {
+    super(code);
+    this.code = code;
+  }
+}
+
+/** Rebuild clusters and insights for a completed run. Does not scrape or reanalyze. */
+export async function reclusterRun(runId: string): Promise<unknown> {
+  const sql = getDb();
+  const runs = await sql<RunRow[]>`
+    select id, project_id, topic, status, attempts, max_attempts, config, scraper_provider, scraper_note, started_at
+    from research_runs
+    where id = ${runId}
+    limit 1
+  `;
+  const run = runs[0];
+  if (!run) throw new ReclusterError('not_found');
+  if (run.status !== 'completed') throw new ReclusterError('not_completed');
+  await cluster(sql, run, { preserveStatus: true });
+  await writeInsights(sql, run, { preserveStatus: true });
+  const fresh = await sql<{ insights: unknown }[]>`
+    select insights from research_runs where id = ${runId} limit 1
+  `;
+  return fresh[0]?.insights ?? null;
 }
 
 function isConcrete(value: string): value is ConcreteScraper {
