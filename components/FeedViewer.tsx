@@ -229,6 +229,7 @@ export default function FeedViewer({ videos, provider, initialVideoId = '' }: Fe
     let lockedUntil = 0;
 
     function scrollToIndex(next: number) {
+      if (!scroller) return;
       const total = videosRef.current.length;
       if (total === 0) return;
       const clamped = Math.max(0, Math.min(total - 1, next));
