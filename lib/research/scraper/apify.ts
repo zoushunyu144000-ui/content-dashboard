@@ -81,11 +81,11 @@ export class ApifyProvider implements ScraperProvider {
     const endpoint = `/v2/datasets/${handle.datasetId}/items`;
     const key = providerCacheKey('apify', endpoint, { clean: true });
     const cached = await readProviderCache(key);
-    const items = cached ?? (await this.fetchItems(handle.datasetId, env.apifyToken, key, endpoint));
+    const items = cached ?? (await this.fetchItems(handle.datasetId, env.apifyToken, key));
     return normalizeApifyTikTokItems(items);
   }
 
-  private async fetchItems(datasetId: string, token: string, key: string, endpoint: string): Promise<unknown> {
+  private async fetchItems(datasetId: string, token: string, key: string): Promise<unknown> {
     const response = await fetch(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true`, {
       headers: { Authorization: `Bearer ${token}` },
     });
