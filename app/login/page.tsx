@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/lib/brand';
+
+function safeNext(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
+  return value;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,126 +18,69 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setError(error.message);
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(typeof data.error === 'string' ? data.error : 'Could not sign in');
       setLoading(false);
       return;
     }
-
-    window.location.href = '/';
+    const next = safeNext(new URLSearchParams(window.location.search).get('next'));
+    window.location.href = next;
   }
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: '#0a0a0f' }}
-    >
-      <div className="w-full max-w-[380px] px-6">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-10">
+    <div className="fixed inset-0 flex items-center justify-center z-50 px-4" style={{ background: '#0a0a0f' }}>
+      <div className="w-full max-w-[380px]">
+        <div className="flex flex-col items-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-dark.png" alt={BRAND.name} className="h-12 w-auto mb-5" />
-          <p
-            className="mt-2 text-sm"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            Sign in to your dashboard
+          <img src="/logo-dark.png" alt={BRAND.name} className="h-12 w-auto mb-4" />
+          <h1 className="font-heading text-xl" style={{ color: 'var(--text-primary)' }}>{BRAND.name}</h1>
+          <p className="mt-2 text-sm text-center" style={{ color: 'var(--text-muted)' }}>
+            Sign in to continue
           </p>
         </div>
-
-        {/* Card */}
-        <div
-          className="rounded-2xl p-6"
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-          }}
-        >
+        <div className="rounded-2xl p-5 sm:p-6" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <form onSubmit={handleLogin} className="space-y-3">
             <input
               type="email"
-              placeholder="Email address"
+              name="email"
+              autoComplete="username"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-200"
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent)';
-                e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-glow)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
+              className="w-full rounded-xl px-4 py-3 text-base outline-none"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
             />
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-200"
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent)';
-                e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-glow)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
+              className="w-full rounded-xl px-4 py-3 text-base outline-none"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
             />
+            {error ? (
+              <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+            ) : null}
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all duration-200 disabled:opacity-50"
-              style={{
-                background: 'var(--accent)',
-                boxShadow: '0 4px 16px rgba(99, 91, 255, 0.3)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--accent-hover)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--accent)';
-              }}
+              className="w-full rounded-xl py-3 text-sm font-semibold text-white disabled:opacity-60"
+              style={{ background: 'var(--accent)' }}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-
-          {error && (
-            <p
-              className="mt-4 text-center text-sm rounded-lg px-3 py-2"
-              style={{
-                color: 'var(--red)',
-                background: 'rgba(239, 68, 68, 0.1)',
-              }}
-            >
-              {error}
-            </p>
-          )}
         </div>
-
-        <p
-          className="mt-6 text-center text-xs"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          Invite-only access. Contact your admin for credentials.
-        </p>
       </div>
     </div>
   );

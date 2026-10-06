@@ -1,23 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
+  experimental: {
+    instrumentationHook: true,
+    serverComponentsExternalPackages: ['postgres', 'bcryptjs'],
+  },
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.cdninstagram.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.fbcdn.net',
-      },
+      { protocol: 'https', hostname: '**.cdninstagram.com' },
+      { protocol: 'https', hostname: '**.fbcdn.net' },
+      { protocol: 'https', hostname: '**.tiktokcdn.com' },
+      { protocol: 'https', hostname: '**.tiktokcdn-us.com' },
+      { protocol: 'https', hostname: '**.tiktokcdn-eu.com' },
+      { protocol: 'https', hostname: '**.ytimg.com' },
     ],
-  },
-  // Bundle the ffmpeg-static binary into serverless functions that need it.
-  // Next 14.2 still nests this under `experimental`.
-  experimental: {
-    outputFileTracingIncludes: {
-      '/api/content/process': ['./node_modules/ffmpeg-static/**/*'],
-    },
   },
 };
 

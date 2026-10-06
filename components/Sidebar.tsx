@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
-import { createClient } from '@/lib/supabase/client';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/lib/brand';
 
 const NAV_SECTIONS = [
   {
@@ -61,35 +60,28 @@ const NAV_SECTIONS = [
   },
 ];
 
-const HREF_TO_SLUG: Record<string, string> = {
-  '/': 'overview',
-  '/research': 'research',
-  '/feed': 'feed',
-  '/insights': 'insights',
-};
-
 interface SidebarProps {
   role?: 'admin' | 'member';
-  pageAccess?: string[];
   userName?: string;
   userEmail?: string;
+  open?: boolean;
+  onNavigate?: () => void;
 }
 
-export default function Sidebar({ role = 'admin', pageAccess = [], userName = '', userEmail = '' }: SidebarProps) {
+export default function Sidebar({ role = 'admin', userName = '', userEmail = '', open = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
 
   if (pathname === '/login') return null;
 
   async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login';
   }
 
   return (
     <nav
-      className="sidebar fixed left-0 top-0 bottom-0 w-[250px] flex flex-col z-50 border-r transition-colors duration-300"
+      className={`sidebar fixed left-0 top-0 bottom-0 w-[250px] flex flex-col z-50 border-r transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
       style={{
         background: 'var(--sidebar-bg)',
         borderColor: 'var(--sidebar-border)',
@@ -106,12 +98,7 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
 
       <div className="flex-1 overflow-y-auto px-3 space-y-6">
         {NAV_SECTIONS.map((section) => {
-          const visibleItems = role === 'admin'
-            ? section.items
-            : section.items.filter((item) => {
-                const slug = HREF_TO_SLUG[item.href] || item.href.replace('/', '');
-                return pageAccess.includes(slug);
-              });
+          const visibleItems = section.items;
           if (visibleItems.length === 0) return null;
           return (
             <div key={section.label || 'root'}>
@@ -132,6 +119,7 @@ export default function Sidebar({ role = 'admin', pageAccess = [], userName = ''
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={onNavigate}
                       className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 group ${
                         isActive
                           ? 'text-[var(--accent)]'

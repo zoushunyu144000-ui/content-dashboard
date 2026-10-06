@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/lib/brand';
 
 interface JobState {
   id: string;

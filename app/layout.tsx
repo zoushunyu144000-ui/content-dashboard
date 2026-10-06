@@ -4,7 +4,7 @@ import ClientLayout from '@/components/ClientLayout';
 import ThemeProvider from '@/components/ThemeProvider';
 import ToastProvider from '@/components/ToastProvider';
 import GlobalFeatures from '@/components/GlobalFeatures';
-import { BRAND } from '@/lib/config';
+import { BRAND } from '@/lib/brand';
 import './globals.css';
 
 const outfit = Outfit({

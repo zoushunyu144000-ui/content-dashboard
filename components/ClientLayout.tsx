@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { usePageAccess } from '@/lib/usePageAccess';
@@ -7,7 +8,12 @@ import { usePageAccess } from '@/lib/usePageAccess';
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const { allowed, loading, role, pageAccess, userName, userEmail } = usePageAccess();
+  const { role, userName, userEmail } = usePageAccess();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   if (isLoginPage) {
     return <>{children}</>;
@@ -15,35 +21,26 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <>
-      <Sidebar role={role} pageAccess={pageAccess} userName={userName} userEmail={userEmail} />
-      <main className="ml-[250px] min-h-screen p-8 relative z-[1]">
-        {!loading && !allowed ? (
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div
-              className="text-center rounded-card p-10 max-w-md"
-              style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-            >
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
-                style={{ background: 'rgba(239, 68, 68, 0.1)' }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-6 h-6" style={{ color: 'var(--red)' }}>
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-                </svg>
-              </div>
-              <h2
-                className="font-heading text-lg font-bold mb-2"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Access Restricted
-              </h2>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                You don&apos;t have permission to view this page. Contact your admin to request access.
-              </p>
-            </div>
-          </div>
-        ) : children}
+      <button
+        type="button"
+        className="md:hidden fixed top-3 left-3 z-[60] rounded-lg px-3 py-2 text-xs font-semibold"
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+        onClick={() => setOpen((value) => !value)}
+        aria-label={open ? 'Close menu' : 'Open menu'}
+      >
+        Menu
+      </button>
+      {open ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
+      <Sidebar role={role} userName={userName} userEmail={userEmail} open={open} onNavigate={() => setOpen(false)} />
+      <main className="min-h-screen p-4 pt-16 md:ml-[250px] md:p-8 relative z-[1]">
+        {children}
       </main>
     </>
   );
