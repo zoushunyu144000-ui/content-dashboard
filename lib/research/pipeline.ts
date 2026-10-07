@@ -840,7 +840,7 @@ function clip(value: string | null | undefined, max: number): string | null {
   return trimmed ? trimmed.slice(0, max) : null;
 }
 
-async function insertAnalysis(
+export async function insertAnalysis(
   sql: Sql,
   runId: string | null,
   nicheId: string | null,

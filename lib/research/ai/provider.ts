@@ -242,17 +242,18 @@ class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
-export function getAIProvider(): AIProvider {
+export function getAIProvider(tier: 'default' | 'intel' = 'default'): AIProvider {
   const env = getServerEnv();
+  const model = tier === 'intel' ? (process.env.AI_MODEL_INTEL?.trim() || env.aiModel) : env.aiModel;
   if ((env.aiProvider || 'openai-compatible') !== 'openai-compatible') {
     throw new Error(`AI_PROVIDER "${env.aiProvider}" is not supported`);
   }
   if (!env.aiModel) throw new Error('AI_MODEL is not configured');
-  assertCurrentModel(env.aiModel);
+  assertCurrentModel(model);
   if (!env.aiBaseUrl) throw new Error('AI_BASE_URL is not configured');
   if (env.aiBaseUrl.includes('generativelanguage.googleapis.com')) {
     throw new Error('Direct Gemini API calls are not allowed');
   }
   if (!env.aiApiKey) throw new Error('AI_API_KEY is not configured');
-  return new OpenAICompatibleProvider(env.aiBaseUrl, env.aiApiKey, env.aiModel);
+  return new OpenAICompatibleProvider(env.aiBaseUrl, env.aiApiKey, model);
 }

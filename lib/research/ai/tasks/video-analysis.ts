@@ -116,7 +116,8 @@ Use only the caption, author, metrics, and transcript provided. Do not invent me
 
 Write audience, pain_point, hook, topic, why_it_works, what_not_to_copy, viral_hypothesis, reusable_pattern, hook_text, summary, and relevance_reason in specific Simplified Chinese.
 Do not use snake_case for those free-text fields.
-Ban empty praise such as "标题吸引人", "内容有价值", or "节奏好". Say what actually happens.
+Ban empty praise such as "标题吸引人", "内容有价值", "引起共鸣", "视觉吸引" or "节奏好". Say what actually happens, referencing concrete details of THIS video (caption words, transcript lines, metrics).
+Quality bar for why_it_works (example of the required level of judgment): "前两秒直接否定目标观众原有认知，通过认知冲突制造停留；随后马上给出一个真实经营场景，让小生意老板产生自我代入，因此既有播放潜力，又有较强商业相关性。"
 
 why_it_works must explain the mechanism: what the opening does, which belief or pain it hits, why a viewer stays, and why that matters commercially for this niche.
 what_not_to_copy must name the part that would fail if another account copied the surface (a stunt, a personal flex, a claim without proof, a format that only works for that creator).
