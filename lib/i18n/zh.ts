@@ -419,6 +419,11 @@ export const zh = {
   'niches.current': '当前赛道',
   'niches.evidence': '证据 {count}',
   'niches.retry': '重试',
+
+  // —— Library ——
+  'library.playVideo': '播放视频',
+  'library.stopPlayback': '停止播放',
+  'library.analysisCta': 'AI 分析详情 ›',
 } as const;
 
 export type ZhKey = keyof typeof zh;

@@ -38,6 +38,7 @@ export default function LibraryHome() {
   const [reloadToken, setReloadToken] = useState(0);
   const [lookupState, setLookupState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [trackedVideoId, setTrackedVideoId] = useState(videoId);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const lookedUp = useRef('');
 
   if (trackedVideoId !== videoId) {
@@ -231,7 +232,13 @@ export default function LibraryHome() {
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {videos.map((video) => (
               <li key={video.id}>
-                <LibraryCard video={video} onOpen={openVideo} />
+                <LibraryCard
+                  video={video}
+                  playing={playingId === video.id}
+                  onPlay={setPlayingId}
+                  onStop={() => setPlayingId(null)}
+                  onOpen={openVideo}
+                />
               </li>
             ))}
           </ul>
