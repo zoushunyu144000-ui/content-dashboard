@@ -574,6 +574,7 @@ function prepareInsights(
     });
     items.sort((a, b) => b.evidenceCount - a.evidenceCount || a.index - b.index);
     items.forEach((item, rank) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { index: _index, ...rest } = item;
       prepared.push({ ...rest, rank: rank + 1 });
     });
