@@ -10,6 +10,8 @@ import {
   HOOK_TYPES,
   PAIN_POINT_CATEGORIES,
   TOPIC_CATEGORIES,
+  VALUE_LEVELS,
+  VALUE_TYPES,
   type AnalysisEnumColumn,
 } from '@/lib/research/taxonomy';
 
@@ -91,13 +93,18 @@ export interface FrequencyBucket {
   pct: number;
 }
 
+export type FrequencyPeriod = 'current' | 'previous';
+
 export interface CategoryFrequencies {
   niche_id: string;
   run_id: string | null;
   window: FrequencyWindow;
   video_count: number;
   analyzed_count: number;
-  frequencies: Record<AnalysisEnumColumn, FrequencyBucket[]>;
+  frequencies: Record<AnalysisEnumColumn, FrequencyBucket[]> & {
+    tags: FrequencyBucket[];
+    value_types: Record<string, FrequencyBucket[]>;
+  };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -224,15 +231,74 @@ function percent(count: number, analyzed: number): number {
   return Math.round((count * 1000) / analyzed) / 10;
 }
 
+function memberSeenFilter(sql: Sql, window: FrequencyWindow, period: FrequencyPeriod) {
+  if (window === '7d' && period === 'previous') {
+    return sql`first_seen_at >= now() - interval '14 days' and first_seen_at < now() - interval '7 days'`;
+  }
+  if (window === '7d') return sql`first_seen_at >= now() - interval '7 days'`;
+  if (window === '30d' && period === 'previous') {
+    return sql`first_seen_at >= now() - interval '60 days' and first_seen_at < now() - interval '30 days'`;
+  }
+  if (window === '30d') return sql`first_seen_at >= now() - interval '30 days'`;
+  return sql`true`;
+}
+
+function analysisSeenFilter(sql: Sql, window: FrequencyWindow, period: FrequencyPeriod) {
+  if (window === '7d' && period === 'previous') {
+    return sql`and v.first_seen_at >= now() - interval '14 days' and v.first_seen_at < now() - interval '7 days'`;
+  }
+  if (window === '7d') return sql`and v.first_seen_at >= now() - interval '7 days'`;
+  if (window === '30d' && period === 'previous') {
+    return sql`and v.first_seen_at >= now() - interval '60 days' and v.first_seen_at < now() - interval '30 days'`;
+  }
+  if (window === '30d') return sql`and v.first_seen_at >= now() - interval '30 days'`;
+  return sql``;
+}
+
+function valueTypeFrequencies(
+  rows: { type_key: string; level: string; count: number }[],
+  analyzed: number,
+): Record<string, FrequencyBucket[]> {
+  const counts = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    if (!row.type_key || !row.level) continue;
+    const levels = counts.get(row.type_key) ?? new Map<string, number>();
+    levels.set(row.level, Number(row.count) || 0);
+    counts.set(row.type_key, levels);
+  }
+  const types = VALUE_TYPES.map(String);
+  for (const type of Array.from(counts.keys())) {
+    if (!types.includes(type)) types.push(type);
+  }
+  const out: Record<string, FrequencyBucket[]> = {};
+  for (const type of types) {
+    const levels = counts.get(type) ?? new Map<string, number>();
+    const order = VALUE_LEVELS.map(String);
+    for (const level of Array.from(levels.keys())) {
+      if (!order.includes(level)) order.push(level);
+    }
+    out[type] = order.map((level) => {
+      const count = levels.get(level) ?? 0;
+      return { key: level, count, pct: percent(count, analyzed) };
+    });
+  }
+  return out;
+}
+
 export async function categoryFrequencies(input: {
   nicheId: string;
   runId?: string | null;
   window: FrequencyWindow;
+  period?: FrequencyPeriod;
 }): Promise<CategoryFrequencies> {
   const nicheId = requireUuid(input.nicheId, 'niche id');
   const window = input.window;
   if (window !== 'run' && window !== '7d' && window !== '30d' && window !== 'all') {
     throw new LibraryInputError('Invalid window');
+  }
+  const period = input.period === 'previous' ? 'previous' : 'current';
+  if (period === 'previous' && window !== '7d' && window !== '30d') {
+    throw new LibraryInputError('previous period is only available for 7d and 30d');
   }
   const runId = input.runId ? requireUuid(input.runId, 'run id') : null;
   if (window === 'run' && !runId) throw new LibraryInputError('run window requires run_id');
@@ -248,22 +314,19 @@ export async function categoryFrequencies(input: {
   const source =
     window === 'run'
       ? sql`(
-          select distinct on (video_id) *
-          from video_analyses
-          where run_id = ${runId}
-            and status = 'complete'
-            and (niche_id = ${nicheId} or niche_id is null)
-          order by video_id, created_at desc
+          select distinct on (a.video_id) a.*
+          from research_run_videos rv
+          join video_analyses a on a.video_id = rv.video_id
+          where rv.run_id = ${runId}
+            and a.is_latest = true
+            and a.status = 'complete'
+            and a.niche_id = ${nicheId}
+          order by a.video_id, a.created_at desc
         ) a`
       : sql`video_analyses a`;
   const nicheFilter =
     window === 'run' ? sql`` : sql`and a.niche_id = ${nicheId} and a.is_latest = true and a.status = 'complete'`;
-  const timeFilter =
-    window === '7d'
-      ? sql`and v.published_at >= now() - interval '7 days'`
-      : window === '30d'
-        ? sql`and v.published_at >= now() - interval '30 days'`
-        : sql``;
+  const timeFilter = analysisSeenFilter(sql, window, period);
 
   const videoCountRows =
     window === 'run'
@@ -272,18 +335,18 @@ export async function categoryFrequencies(input: {
         `
       : await sql<{ n: number }[]>`
           select count(distinct video_id)::int as n from (
-            select rv.video_id, v.published_at
+            select rv.video_id, v.first_seen_at
             from research_run_videos rv
             join research_runs r on r.id = rv.run_id
             join videos v on v.id = rv.video_id
             where r.project_id = ${nicheId}
             union
-            select a.video_id, v.published_at
+            select a.video_id, v.first_seen_at
             from video_analyses a
             join videos v on v.id = a.video_id
             where a.niche_id = ${nicheId}
           ) members
-          where ${window === 'all' ? sql`true` : window === '7d' ? sql`published_at >= now() - interval '7 days'` : sql`published_at >= now() - interval '30 days'`}
+          where ${memberSeenFilter(sql, window, period)}
         `;
 
   const analyzedRows = await sql<{ n: number }[]>`
@@ -295,7 +358,7 @@ export async function categoryFrequencies(input: {
       ${timeFilter}
   `;
   const analyzed = Number(analyzedRows[0]?.n || 0);
-  const frequencies = {} as Record<AnalysisEnumColumn, FrequencyBucket[]>;
+  const frequencies = {} as CategoryFrequencies['frequencies'];
 
   for (const column of ANALYSIS_ENUM_COLUMNS) {
     const expr = enumColumn(sql, column);
@@ -318,6 +381,42 @@ export async function categoryFrequencies(input: {
         pct: percent(Number(row.count) || 0, analyzed),
       }));
   }
+
+  const tagRows = await sql<{ key: string; count: number }[]>`
+    select tag as key, count(*)::int as count
+    from ${source}
+    join videos v on v.id = a.video_id
+    cross join lateral unnest(coalesce(a.tags, '{}')) as tag
+    where a.status = 'complete'
+      ${nicheFilter}
+      ${timeFilter}
+      and tag <> ''
+    group by 1
+    order by count(*) desc, 1
+    limit 20
+  `;
+  frequencies.tags = tagRows
+    .filter((row) => row.key)
+    .map((row) => ({
+      key: row.key,
+      count: Number(row.count) || 0,
+      pct: percent(Number(row.count) || 0, analyzed),
+    }));
+
+  const valueRows = await sql<{ type_key: string; level: string; count: number }[]>`
+    select vt.type_key, vt.level, count(*)::int as count
+    from ${source}
+    join videos v on v.id = a.video_id
+    cross join lateral jsonb_each_text(
+      case when jsonb_typeof(a.value_types) = 'object' then a.value_types else '{}'::jsonb end
+    ) as vt(type_key, level)
+    where a.status = 'complete'
+      ${nicheFilter}
+      ${timeFilter}
+      and vt.level <> ''
+    group by 1, 2
+  `;
+  frequencies.value_types = valueTypeFrequencies(valueRows, analyzed);
 
   return {
     niche_id: nicheId,

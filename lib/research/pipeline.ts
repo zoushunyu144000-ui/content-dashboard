@@ -25,6 +25,7 @@ import {
   type VideoAnalysisDraft,
   type VideoAnalysisInput,
 } from '@/lib/research/ai/tasks/video-analysis';
+import { generateRunIntelligence } from '@/lib/research/intelligence';
 import { finalizeInsightGroups, groupShare, sourceKey } from '@/lib/research/insight-groups';
 import { RELEVANCE_MIN } from '@/lib/research/relevance';
 import {
@@ -1085,6 +1086,9 @@ async function writeInsights(sql: Sql, run: RunRow, options?: { preserveStatus?:
     where id = ${run.id}
   `;
   await event(sql, run.id, 'completed', 'Research run completed');
+  void generateRunIntelligence(run.id).catch((err) => {
+    console.error('[intelligence] run report failed', run.id, err);
+  });
   return 'completed';
 }
 
