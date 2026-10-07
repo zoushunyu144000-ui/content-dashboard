@@ -23,9 +23,12 @@ export async function generateIdeas(runId: string): Promise<{ count: number }> {
       niche: string | null;
       audience: string | null;
       voice: string | null;
+      target_audience: string | null;
+      core_business: string | null;
     }[]
   >`
-    select r.id, r.project_id, r.topic, r.status, r.insights, p.name, p.niche, p.audience, p.voice
+    select r.id, r.project_id, r.topic, r.status, r.insights,
+           p.name, p.niche, p.audience, p.voice, p.target_audience, p.core_business
     from research_runs r
     join projects p on p.id = r.project_id
     where r.id = ${runId}
@@ -56,7 +59,12 @@ export async function generateIdeas(runId: string): Promise<{ count: number }> {
     task: 'content_ideas',
     system: CONTENT_IDEA_SYSTEM,
     user: contentIdeaUserPrompt({
-      project: { name: run.name, niche: run.niche, audience: run.audience, voice: run.voice },
+      project: {
+        name: run.name,
+        niche: run.core_business || run.niche,
+        audience: run.target_audience || run.audience,
+        voice: run.voice,
+      },
       topic: run.topic,
       insights: run.insights,
       topVideos: videos,
@@ -65,6 +73,8 @@ export async function generateIdeas(runId: string): Promise<{ count: number }> {
     schema: CONTENT_IDEA_SCHEMA,
     maxTokens: 8000,
     timeoutMs: 120_000,
+    promptVersion: PROMPT_VERSION,
+    inputSource: { run_id: runId, niche_id: run.project_id, window: 'run' },
   });
 
   await sql.begin(async (tx) => {

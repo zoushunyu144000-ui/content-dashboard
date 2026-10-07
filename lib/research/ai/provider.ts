@@ -1,5 +1,12 @@
 import 'server-only';
 import { getServerEnv } from '@/lib/env.server';
+import {
+  finishAiTaskRun,
+  isAIAnalysisError,
+  startAiTaskRun,
+  AIAnalysisError,
+  type AIInputSource,
+} from './audit';
 import { stripForStrict, type JsonSchema } from './schema';
 import { validateJson } from './validate';
 
@@ -13,6 +20,9 @@ export interface CompleteJsonParams {
   schema: JsonSchema;
   maxTokens?: number;
   timeoutMs?: number;
+  promptVersion?: string;
+  inputSource?: AIInputSource | null;
+  requestMeta?: Record<string, unknown> | null;
 }
 
 export interface CompleteJsonResult<T> {
@@ -20,6 +30,7 @@ export interface CompleteJsonResult<T> {
   model: string;
   mode: AIMode;
   raw: string;
+  aiTaskRunId: string;
 }
 
 export interface AIProvider {
@@ -27,8 +38,13 @@ export interface AIProvider {
   completeJson<T>(params: CompleteJsonParams): Promise<CompleteJsonResult<T>>;
 }
 
+export { AIAnalysisError, isAIAnalysisError };
+
 const modeCache = globalThis as unknown as { __contentIntelAiMode?: AIMode };
 const MODE_ORDER: AIMode[] = ['json_schema', 'json_object', 'prompt'];
+
+/** Gemini 2.5 and older must never be selected, including as a fallback. */
+const OLD_GEMINI = /gemini[-_.]?(?:1|2)(?:[-_.]|$)|gemini-pro(?:[-_.]|$)|gemini-flash-latest/i;
 
 class ModeRejectedError extends Error {
   constructor(message: string) {
@@ -54,6 +70,12 @@ function parseModelJson(raw: string): unknown {
   }
 }
 
+function assertCurrentModel(model: string): void {
+  if (OLD_GEMINI.test(model)) {
+    throw new Error('AI_MODEL is Gemini 2.5 or older and is not allowed');
+  }
+}
+
 class OpenAICompatibleProvider implements AIProvider {
   id = 'openai-compatible';
 
@@ -64,42 +86,101 @@ class OpenAICompatibleProvider implements AIProvider {
   ) {}
 
   async completeJson<T>(params: CompleteJsonParams): Promise<CompleteJsonResult<T>> {
-    const preferred = modeCache.__contentIntelAiMode;
-    const modes = preferred
-      ? [preferred, ...MODE_ORDER.filter((mode) => mode !== preferred)]
-      : MODE_ORDER;
-    let lastError = 'no response';
+    const started = Date.now();
+    const taskRunId = await startAiTaskRun({
+      taskType: params.task,
+      model: this.model,
+      promptVersion: params.promptVersion ?? null,
+      inputSource: params.inputSource ?? null,
+      requestMeta: {
+        schema_name: params.schemaName,
+        max_tokens: params.maxTokens ?? 8000,
+        timeout_ms: params.timeoutMs ?? 120_000,
+        ...(params.requestMeta ?? {}),
+      },
+    });
+    let lastRaw: string | null = null;
+    let lastParsed: unknown;
+    let parsedOnce = false;
 
-    for (const mode of modes) {
-      let user = params.user;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          const raw = await this.request(mode, params, user);
-          const parsed = parseModelJson(raw);
-          const verdict = validateJson(parsed, params.schema);
-          if (!verdict.ok) {
-            lastError = verdict.errors.slice(0, 8).join('; ');
-            user = `${params.user}\n\nThe previous JSON failed validation: ${lastError}\nReturn only corrected JSON.`;
-            continue;
+    try {
+      const preferred = modeCache.__contentIntelAiMode;
+      const modes = preferred
+        ? [preferred, ...MODE_ORDER.filter((mode) => mode !== preferred)]
+        : MODE_ORDER;
+      let lastError = 'no response';
+
+      for (const mode of modes) {
+        let user = params.user;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const raw = await this.request(mode, params, user);
+            lastRaw = raw;
+            let parsed: unknown;
+            try {
+              parsed = parseModelJson(raw);
+            } catch (err) {
+              parsedOnce = false;
+              if (err instanceof SyntaxError) {
+                lastError = err.message;
+                user = `${params.user}\n\nThe previous response was not valid JSON. Return only a JSON object.`;
+                continue;
+              }
+              throw err;
+            }
+            lastParsed = parsed;
+            parsedOnce = true;
+            const verdict = validateJson(parsed, params.schema);
+            if (!verdict.ok) {
+              lastError = verdict.errors.slice(0, 8).join('; ');
+              user = `${params.user}\n\nThe previous JSON failed validation: ${lastError}\nReturn only corrected JSON.`;
+              continue;
+            }
+            modeCache.__contentIntelAiMode = mode;
+            await finishAiTaskRun({
+              id: taskRunId,
+              status: 'complete',
+              error: null,
+              latencyMs: Date.now() - started,
+              rawJson: parsed,
+              mode,
+            });
+            return { data: parsed as T, model: this.model, mode, raw, aiTaskRunId: taskRunId };
+          } catch (err) {
+            if (err instanceof ModeRejectedError) {
+              lastError = err.message;
+              break;
+            }
+            if (err instanceof SyntaxError) {
+              parsedOnce = false;
+              lastError = err.message;
+              user = `${params.user}\n\nThe previous response was not valid JSON. Return only a JSON object.`;
+              continue;
+            }
+            throw err;
           }
-          modeCache.__contentIntelAiMode = mode;
-          return { data: parsed as T, model: this.model, mode, raw };
-        } catch (err) {
-          if (err instanceof ModeRejectedError) {
-            lastError = err.message;
-            break;
-          }
-          if (err instanceof SyntaxError) {
-            lastError = err.message;
-            user = `${params.user}\n\nThe previous response was not valid JSON. Return only a JSON object.`;
-            continue;
-          }
-          throw err;
         }
       }
-    }
 
-    throw new Error(`AI response failed validation (${lastError})`);
+      throw new Error(`AI response failed validation (${lastError})`);
+    } catch (err) {
+      if (isAIAnalysisError(err)) throw err;
+      const message = err instanceof Error ? err.message : 'AI request failed';
+      const rawJson = parsedOnce ? lastParsed : lastRaw != null ? { raw_text: lastRaw } : null;
+      try {
+        await finishAiTaskRun({
+          id: taskRunId,
+          status: 'failed',
+          error: message,
+          latencyMs: Date.now() - started,
+          rawJson,
+        });
+      } catch (writeErr) {
+        const writeMessage = writeErr instanceof Error ? writeErr.message : 'audit write failed';
+        throw new AIAnalysisError(`${message} (audit log failed: ${writeMessage})`, taskRunId);
+      }
+      throw new AIAnalysisError(message, taskRunId);
+    }
   }
 
   private async request(mode: AIMode, params: CompleteJsonParams, user: string): Promise<string> {
@@ -167,6 +248,7 @@ export function getAIProvider(): AIProvider {
     throw new Error(`AI_PROVIDER "${env.aiProvider}" is not supported`);
   }
   if (!env.aiModel) throw new Error('AI_MODEL is not configured');
+  assertCurrentModel(env.aiModel);
   if (!env.aiBaseUrl) throw new Error('AI_BASE_URL is not configured');
   if (env.aiBaseUrl.includes('generativelanguage.googleapis.com')) {
     throw new Error('Direct Gemini API calls are not allowed');

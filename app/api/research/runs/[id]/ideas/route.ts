@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
 import { getDb } from '@/lib/db';
+import { isAIAnalysisError } from '@/lib/research/ai/provider';
 import { generateIdeas } from '@/lib/research/ideas';
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,13 @@ export async function POST(_request: Request, { params }: { params: { id: string
     `;
     return NextResponse.json({ count: result.count, ideas });
   } catch (err) {
+    if (isAIAnalysisError(err)) {
+      console.error('[ideas] generate failed', err.message);
+      return NextResponse.json(
+        { error: 'AI 分析失败', message: err.message, ai_task_run_id: err.aiTaskRunId, retry: true },
+        { status: 502 },
+      );
+    }
     const message = err instanceof Error ? err.message : 'Could not generate ideas';
     const status = /not found/i.test(message) ? 404 : /completed/i.test(message) ? 409 : 500;
     if (status === 500) console.error('[ideas] generate failed', err);

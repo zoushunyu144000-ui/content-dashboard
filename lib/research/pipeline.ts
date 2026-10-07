@@ -1,7 +1,7 @@
 import 'server-only';
 import { getDb } from '@/lib/db';
 import { getServerEnv } from '@/lib/env.server';
-import { getAIProvider } from '@/lib/research/ai/provider';
+import { getAIProvider, isAIAnalysisError } from '@/lib/research/ai/provider';
 import {
   INSIGHT_MERGE_SCHEMA,
   INSIGHT_MERGE_SYSTEM,
@@ -12,6 +12,7 @@ import {
 import {
   KEYWORD_SCHEMA,
   KEYWORD_SYSTEM,
+  PROMPT_VERSION as KEYWORD_PROMPT_VERSION,
   keywordUserPrompt,
   type KeywordDraft,
 } from '@/lib/research/ai/tasks/keywords';
@@ -25,8 +26,20 @@ import {
   type VideoAnalysisInput,
 } from '@/lib/research/ai/tasks/video-analysis';
 import { finalizeInsightGroups, groupShare, sourceKey } from '@/lib/research/insight-groups';
-import { snakeLabel } from '@/lib/research/labels';
 import { RELEVANCE_MIN } from '@/lib/research/relevance';
+import {
+  AUDIENCE_CATEGORIES,
+  CONTENT_FORMATS,
+  CONTENT_STRUCTURES,
+  CTA_TYPES,
+  EMOTIONS,
+  HOOK_TYPES,
+  PAIN_POINT_CATEGORIES,
+  TOPIC_CATEGORIES,
+  coerceTaxonomyKey,
+  normalizeTags,
+  normalizeValueTypes,
+} from '@/lib/research/taxonomy';
 import { scoreVideos, type ScoreInput } from '@/lib/research/score';
 import { InsufficientBalanceError, ScraperUnavailableError } from '@/lib/research/scraper/errors';
 import {
@@ -102,7 +115,11 @@ export async function tickOnce(workerId: string): Promise<{ didWork: boolean; ru
     const status = await advance(sql, run);
     return { didWork: true, runId: run.id, status };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Research step failed';
+    const message = isAIAnalysisError(err)
+      ? `AI 分析失败: ${err.message}`
+      : err instanceof Error
+        ? err.message
+        : 'Research step failed';
     console.error('[research] step failed', run.id, message);
     const status = await backoff(sql, run, message);
     return { didWork: true, runId: run.id, status };
@@ -180,9 +197,17 @@ async function expandKeywords(sql: Sql, run: RunRow): Promise<string> {
     where id = ${run.id}
   `;
   const projects = await sql<
-    { name: string; niche: string | null; audience: string | null; default_language: string; platforms: string[] }[]
+    {
+      name: string;
+      niche: string | null;
+      audience: string | null;
+      default_language: string;
+      platforms: string[];
+      target_audience: string | null;
+      core_business: string | null;
+    }[]
   >`
-    select name, niche, audience, default_language, platforms
+    select name, niche, audience, default_language, platforms, target_audience, core_business
     from projects where id = ${run.project_id} limit 1
   `;
   const project = projects[0];
@@ -197,8 +222,8 @@ async function expandKeywords(sql: Sql, run: RunRow): Promise<string> {
       system: KEYWORD_SYSTEM,
       user: keywordUserPrompt({
         name: project.name,
-        niche: project.niche,
-        audience: project.audience,
+        niche: project.core_business || project.niche,
+        audience: project.target_audience || project.audience,
         language: project.default_language || 'en',
         topic: run.topic,
         platforms: project.platforms?.length ? project.platforms : ['tiktok'],
@@ -207,6 +232,8 @@ async function expandKeywords(sql: Sql, run: RunRow): Promise<string> {
       schema: KEYWORD_SCHEMA,
       maxTokens: 4000,
       timeoutMs: 90_000,
+      promptVersion: KEYWORD_PROMPT_VERSION,
+      inputSource: { run_id: run.id, niche_id: run.project_id, window: 'run' },
     });
     drafts = result.data.keywords;
     await event(sql, run.id, 'keyword_expansion', `Expanded ${drafts.length} keywords with ${result.model}`);
@@ -214,7 +241,7 @@ async function expandKeywords(sql: Sql, run: RunRow): Promise<string> {
     source = 'user';
     const message = err instanceof Error ? err.message : 'keyword expansion failed';
     drafts = [{ term: run.topic, platform: 'tiktok', intent: 'trend', language: project.default_language || 'en' }];
-    await event(sql, run.id, 'keyword_expansion', `Keyword expansion failed (${message}). Using the topic itself.`);
+    await event(sql, run.id, 'keyword_expansion', `AI 分析失败 (${message}). Using the topic itself.`);
   }
 
   for (const draft of drafts) {
@@ -748,8 +775,9 @@ async function analyze(sql: Sql, run: RunRow): Promise<string> {
     return 'clustering';
   }
 
-  const projects = await sql<{ niche: string | null }[]>`
-    select niche from projects where id = ${run.project_id} limit 1
+  const projects = await sql<{ niche: string | null; audience: string | null; target_audience: string | null; core_business: string | null }[]>`
+    select niche, audience, target_audience, core_business
+    from projects where id = ${run.project_id} limit 1
   `;
   const inputs: VideoAnalysisInput[] = pending.map((row) => ({
     video_ref: row.id,
@@ -764,25 +792,40 @@ async function analyze(sql: Sql, run: RunRow): Promise<string> {
     transcript: row.transcript ? row.transcript.slice(0, 1500) : null,
   }));
   const ai = getAIProvider();
+  const profile = projects[0];
   const result = await ai.completeJson<{ analyses: VideoAnalysisDraft[] }>({
     task: 'video_analysis',
     system: VIDEO_ANALYSIS_SYSTEM,
-    user: videoAnalysisUserPrompt({ topic: run.topic, niche: projects[0]?.niche || null, videos: inputs }),
+    user: videoAnalysisUserPrompt({
+      topic: run.topic,
+      niche: profile?.niche || null,
+      audience: profile?.target_audience || profile?.audience || null,
+      business: profile?.core_business || null,
+      videos: inputs,
+    }),
     schemaName: 'video_analyses',
     schema: VIDEO_ANALYSIS_SCHEMA,
-    maxTokens: 8000,
+    maxTokens: 16000,
     timeoutMs: 180_000,
+    promptVersion: PROMPT_VERSION,
+    inputSource: {
+      run_id: run.id,
+      niche_id: run.project_id,
+      window: 'run',
+      video_id: pending.length === 1 ? pending[0].id : undefined,
+      video_ids: pending.map((row) => row.id),
+    },
   });
   const byRef = new Map(result.data.analyses.map((item) => [item.video_ref, item]));
   for (const row of pending) {
     const analysis = byRef.get(row.id);
     if (!analysis) {
-      await insertAnalysis(sql, run.id, row.id, null, result.model, 'failed', 'Model omitted this video');
+      await insertAnalysis(sql, run.id, run.project_id, row.id, null, result.model, 'failed', 'Model omitted this video');
       continue;
     }
-    await insertAnalysis(sql, run.id, row.id, analysis, result.model, 'complete', null);
+    await insertAnalysis(sql, run.id, run.project_id, row.id, analysis, result.model, 'complete', null);
   }
-  await event(sql, run.id, 'analyzing', `Analyzed ${pending.length} videos with ${result.model}`);
+  await event(sql, run.id, 'analyzing', `Analyzed ${pending.length} videos with ${result.model} (${result.aiTaskRunId})`);
   await sql`
     update research_runs
     set progress = 80, run_after = null, locked_at = null, locked_by = null, error_message = null
@@ -791,36 +834,81 @@ async function analyze(sql: Sql, run: RunRow): Promise<string> {
   return 'analyzing';
 }
 
+function clip(value: string | null | undefined, max: number): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
+}
+
 async function insertAnalysis(
   sql: Sql,
-  runId: string,
+  runId: string | null,
+  nicheId: string | null,
   videoId: string,
   analysis: VideoAnalysisDraft | null,
   model: string,
   status: 'complete' | 'failed',
   error: string | null,
 ): Promise<void> {
-  const replicability =
-    analysis && Number.isInteger(analysis.replicability)
-      ? Math.min(100, Math.max(0, analysis.replicability))
-      : null;
+  const score = boundedScore(analysis?.replicability_score);
   const relevance = boundedScore(analysis?.relevance);
-  const relevanceReason = analysis?.relevance_reason?.trim().slice(0, 280) || null;
-  await sql`
-    insert into video_analyses (
-      run_id, video_id, audience, pain_point, hook, hook_type, emotion, topic, content_structure,
-      viral_hypothesis, reusable_pattern, replicability, relevance, relevance_reason, hook_text, summary,
-      model, prompt_version, analysis_version, raw_json, status, error
-    ) values (
-      ${runId}, ${videoId}, ${analysis?.audience || null}, ${snakeLabel(analysis?.pain_point)},
-      ${analysis?.hook || null}, ${analysis?.hook_type || null}, ${analysis?.emotion || null},
-      ${snakeLabel(analysis?.topic)}, ${analysis?.content_structure || null}, ${analysis?.viral_hypothesis || null},
-      ${analysis?.reusable_pattern || null}, ${replicability}, ${relevance}, ${relevanceReason},
-      ${analysis?.hook_text || null}, ${analysis?.summary || null}, ${model}, ${PROMPT_VERSION}, ${ANALYSIS_VERSION},
-      ${analysis ? sql.json(analysis as never) : null}, ${status}, ${error}
-    )
-    on conflict (run_id, video_id, prompt_version) do nothing
-  `;
+  const relevanceReason = clip(analysis?.relevance_reason, 280);
+  const valueTypes = analysis ? normalizeValueTypes(analysis.value_types) : null;
+  const tags = analysis ? normalizeTags(analysis.tags) : [];
+  await sql.begin(async (tx) => {
+    const inserted = await tx<{ id: string }[]>`
+      insert into video_analyses (
+        run_id, video_id, niche_id, audience, pain_point, hook, hook_type, emotion, topic, content_structure,
+        content_format, cta_type, why_it_works, what_not_to_copy,
+        viral_hypothesis, reusable_pattern, replicability, replicability_score, relevance, relevance_reason,
+        hook_text, summary, pain_point_category, topic_category, audience_category,
+        value_types, tags, is_latest,
+        model, prompt_version, analysis_version, raw_json, status, error
+      ) values (
+        ${runId}, ${videoId}, ${nicheId},
+        ${clip(analysis?.audience, 500)},
+        ${clip(analysis?.pain_point, 500)},
+        ${clip(analysis?.hook, 500)},
+        ${coerceTaxonomyKey(analysis?.hook_type, HOOK_TYPES)},
+        ${coerceTaxonomyKey(analysis?.emotion, EMOTIONS)},
+        ${clip(analysis?.topic, 500)},
+        ${coerceTaxonomyKey(analysis?.content_structure, CONTENT_STRUCTURES)},
+        ${coerceTaxonomyKey(analysis?.content_format, CONTENT_FORMATS)},
+        ${coerceTaxonomyKey(analysis?.cta_type, CTA_TYPES)},
+        ${clip(analysis?.why_it_works, 2000)},
+        ${clip(analysis?.what_not_to_copy, 2000)},
+        ${clip(analysis?.viral_hypothesis, 2000)},
+        ${clip(analysis?.reusable_pattern, 2000)},
+        ${score},
+        ${score},
+        ${relevance},
+        ${relevanceReason},
+        ${clip(analysis?.hook_text, 500)},
+        ${clip(analysis?.summary, 2000)},
+        ${coerceTaxonomyKey(analysis?.pain_point_category, PAIN_POINT_CATEGORIES)},
+        ${coerceTaxonomyKey(analysis?.topic_category, TOPIC_CATEGORIES)},
+        ${coerceTaxonomyKey(analysis?.audience_category, AUDIENCE_CATEGORIES)},
+        ${valueTypes ? tx.json(valueTypes as never) : null},
+        ${tx.array(tags, 1009)},
+        true,
+        ${model},
+        ${PROMPT_VERSION},
+        ${ANALYSIS_VERSION},
+        ${analysis ? tx.json(analysis as never) : null},
+        ${status},
+        ${error}
+      )
+      on conflict (run_id, video_id, prompt_version) do nothing
+      returning id
+    `;
+    const id = inserted[0]?.id;
+    if (!id) return;
+    await tx`
+      update video_analyses
+      set is_latest = false
+      where video_id = ${videoId} and id <> ${id} and is_latest = true
+    `;
+  });
 }
 
 async function cluster(sql: Sql, run: RunRow, options?: { preserveStatus?: boolean }): Promise<string> {
@@ -828,7 +916,13 @@ async function cluster(sql: Sql, run: RunRow, options?: { preserveStatus?: boole
     { video_id: string; pain_point: string | null; hook_type: string | null; emotion: string | null; topic: string | null; content_structure: string | null }[]
   >`
     select distinct on (video_id)
-      video_id, pain_point, hook_type, emotion, topic, content_structure, relevance
+      video_id,
+      coalesce(pain_point_category, pain_point) as pain_point,
+      hook_type,
+      emotion,
+      coalesce(topic_category, topic) as topic,
+      content_structure,
+      relevance
     from video_analyses
     where run_id = ${run.id}
       and status = 'complete'
@@ -867,12 +961,14 @@ async function cluster(sql: Sql, run: RunRow, options?: { preserveStatus?: boole
         schema: INSIGHT_MERGE_SCHEMA,
         maxTokens: 4000,
         timeoutMs: 90_000,
+        promptVersion: MERGE_PROMPT_VERSION,
+        inputSource: { run_id: run.id, niche_id: run.project_id, window: 'run' },
       });
       groups = result.data.groups;
       method = 'hybrid';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'insight merge failed';
-      await event(sql, run.id, 'clustering', `Insight merge failed (${message}). Using tag counts.`);
+      await event(sql, run.id, 'clustering', `AI 分析失败 (${message}). Using tag counts.`);
       groups = [];
       method = 'tag_count';
     }
