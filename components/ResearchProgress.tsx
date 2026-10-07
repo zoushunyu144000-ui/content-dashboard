@@ -57,6 +57,11 @@ export default function ResearchProgress({ run, events }: ResearchProgressProps)
           <div className="text-xs text-muted">{stepLabel(run.status)}</div>
         </div>
       </div>
+      {run.status === 'completed' ? (
+        <a className="btn-primary" href={`/api/runs/${encodeURIComponent(run.id)}/report/txt`} download>
+          下载本话题报告 (TXT)
+        </a>
+      ) : null}
       <ScraperNote note={run.scraper_note} />
       <ProgressBar value={run.progress} />
       <ol className="flex gap-1.5 overflow-x-auto pb-1">

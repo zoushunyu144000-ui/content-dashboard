@@ -265,6 +265,9 @@ export default function ResearchHome() {
 
       {run?.status === 'completed' && project ? (
         <div className="flex flex-wrap gap-2">
+          <a className="btn-primary" href={`/api/runs/${encodeURIComponent(run.id)}/report/txt`} download>
+            下载本话题报告 (TXT)
+          </a>
           <Link className="btn-primary" href={`/feed?${projectQuery}&run=${encodeURIComponent(run.id)}`}>{t('research.openFeed')}</Link>
           <Link className="btn-ghost" href={`/insights?${projectQuery}&run=${encodeURIComponent(run.id)}`}>{t('research.openInsights')}</Link>
         </div>
@@ -297,6 +300,17 @@ export default function ResearchHome() {
               <span className="text-xs text-muted">{stepLabel(item.status)} · {item.progress ?? 0}%</span>
             </div>
             <p className="provider-label mt-1">{providerLabel(item.scraper_provider)} · {formatTime(item.created_at)}</p>
+            {item.status === 'completed' ? (
+              <a
+                className="btn-primary mt-2"
+                href={`/api/runs/${encodeURIComponent(item.id)}/report/txt`}
+                download
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                下载本话题报告 (TXT)
+              </a>
+            ) : null}
             {item.status === 'failed' && item.error_message ? <p className="error-banner mt-2">{item.error_message}</p> : null}
             <div className="mt-2"><ScraperNote note={item.scraper_note} /></div>
           </article>

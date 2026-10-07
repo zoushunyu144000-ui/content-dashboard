@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MetricPill from '@/components/MetricPill';
+import ProjectReportDownload from '@/components/ProjectReportDownload';
 import { useProject } from '@/components/ProjectProvider';
 import ScoreBadge from '@/components/ScoreBadge';
 import { authorLabel } from '@/components/library/shared';
@@ -177,6 +178,9 @@ export default function DashboardHome() {
         <p className="mt-1 text-sm text-muted">
           {project?.name || (projectLoading ? t('project.loading') : t('project.choose'))}
         </p>
+        <div className="mt-3">
+          <ProjectReportDownload />
+        </div>
       </div>
 
       {projectError || error ? (
