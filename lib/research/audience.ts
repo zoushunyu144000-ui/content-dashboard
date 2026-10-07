@@ -8,7 +8,7 @@ import { categoryFrequencies, type FrequencyBucket } from '@/lib/research/librar
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UUID_ARRAY_OID = 2951;
 
-export const AUDIENCE_PROMPT_VERSION = 'aud-v1';
+export const AUDIENCE_PROMPT_VERSION = 'aud-v2';
 
 export const AUDIENCE_CATEGORIES = [
   'audience_segment',
@@ -26,6 +26,7 @@ export const AUDIENCE_CATEGORIES = [
 
 export type AudienceCategory = (typeof AUDIENCE_CATEGORIES)[number];
 
+const QUOTE_SOURCES = new Set(['caption', 'transcript', 'comment']);
 const LEVELS = ['observed', 'inferred', 'speculative'] as const;
 const CONFIDENCE = ['high', 'medium', 'low'] as const;
 type ObservationLevel = (typeof LEVELS)[number];
@@ -71,10 +72,15 @@ const ITEM_SCHEMA: JsonSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['video_id', 'quote'],
+        required: ['video_id', 'quote', 'source'],
         properties: {
           video_id: { type: 'string' },
           quote: { type: 'string', description: 'caption、transcript 或评论中的短原文' },
+          source: {
+            type: 'string',
+            enum: ['caption', 'transcript', 'comment'],
+            description: '评论原文用 comment',
+          },
         },
       },
     },
@@ -105,10 +111,12 @@ const AUDIENCE_SYSTEM = `你是受众情报分析师。只根据这次研究给�
 
 只能使用输入里的视频。禁止编造视频 id。禁止使用输入没有支持的通用行业知识。禁止出现这些套话：内容有价值、标题很吸引人、抓住用户注意力。不要自己计算频率或条数，系统会用证据视频数去除以已分析视频数。
 
-每条都必须引用输入中的 video_ids。supporting_quotes 是 caption、transcript 或评论里的短原文，带上对应 video_id；没有原文就给空数组，不要改写。不适用的文本字段用空字符串。
+每条都必须引用输入中的 video_ids。supporting_quotes 是 caption、transcript 或评论里的短原文，带 video_id 和 source（caption、transcript 或 comment）。引用评论时 source 必须是 comment，并带上该评论所属视频的 video_id。没有原文就给空数组，不要改写。不适用的文本字段用空字符串。
+
+输入视频的 comments 最多 6 条，按点赞从高到低，形如 {text, likes}。这些评论是 OBSERVED 证据，可以直接写入 supporting_quotes（video_id 加 source:'comment'）。comments 为 null 表示该视频没有采集到评论原文。comments_collected 为 false 时，这次运行没有评论证据。不要假装看过没有给出的评论。
 
 observation_level 只能是小写：
-- observed：OBSERVED，直接出现在 caption、transcript、评论原文或互动数据里
+- observed：OBSERVED，直接出现在 caption、transcript、评论原文或互动数据里。comments 里的 text 都是 OBSERVED。
 - inferred：INFERRED，由多条事实推导出来
 - speculative：SPECULATIVE，证据弱
 confidence 只能是 high、medium、low，并且要和证据强度一致。
@@ -117,7 +125,6 @@ pain_point 必须写清链条 surface_problem → underlying_problem → underly
 例：客户总在 WhatsApp 问价格 → 老板每天重复回答相同问题，沟通时间成本高 → 希望客户联系前就完成基本信息获取和筛选 → 减少无效沟通，同时显得更专业。
 need 的 need_kind 只能是 functional（功能）或 emotional（心理）。其他类别的 need_kind 用 none。
 content_gap 是数据里已经出现、但现有高表现视频没有好好满足的受众需求。
-comments_collected 为 false 或某条视频的 comment_texts 为 null 时，评论原文没有采集，不要假装看过评论。
 niche 只用于用词，不能当作证据。
 
 类别含义：
@@ -152,6 +159,7 @@ export class AudienceNotFoundError extends Error {
 export interface AudienceQuote {
   video_id: string;
   quote: string;
+  source?: string;
 }
 
 export interface AudienceInsight {
@@ -215,7 +223,7 @@ interface VideoRow {
   tags: string[] | null;
   value_types: unknown;
   cta_type: string | null;
-  comment_texts: string | null;
+  top_comments: unknown;
 }
 
 interface InsightRow {
@@ -292,6 +300,11 @@ function isNeedKind(value: string): value is NeedKind {
   return value === 'functional' || value === 'emotional';
 }
 
+function quoteSource(value: unknown): string | null {
+  const source = text(value).toLowerCase();
+  return QUOTE_SOURCES.has(source) ? source : null;
+}
+
 function num(value: unknown): number | null {
   if (value == null || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -341,7 +354,8 @@ function parseQuotes(value: unknown): AudienceQuote[] {
     const videoId = text(record.video_id);
     const quote = text(record.quote);
     if (!videoId || !quote) continue;
-    quotes.push({ video_id: videoId, quote });
+    const source = quoteSource(record.source);
+    quotes.push(source ? { video_id: videoId, quote, source } : { video_id: videoId, quote });
   }
   return quotes;
 }
@@ -416,7 +430,7 @@ async function loadVideos(sql: Sql, runId: string, nicheId: string): Promise<Vid
   return sql<VideoRow[]>`
     select id, caption, transcript, views, likes, comments, viral_score, is_high_potential,
            audience, pain_point, pain_point_category, topic, hook, hook_type, emotion,
-           why_it_works, tags, value_types, cta_type, comment_texts
+           why_it_works, tags, value_types, cta_type, top_comments
     from (
       select distinct on (v.id)
         v.id,
@@ -438,27 +452,24 @@ async function loadVideos(sql: Sql, runId: string, nicheId: string): Promise<Vid
         coalesce(a.tags, '{}') as tags,
         a.value_types,
         a.cta_type,
-        case
-          when jsonb_typeof(v.raw->'comments') = 'string' and length(btrim(v.raw->>'comments')) > 0
-            then left(btrim(v.raw->>'comments'), 600)
-          when jsonb_typeof(v.raw->'comments') = 'array' then (
-            select left(string_agg(snippet, chr(10) order by ord), 600)
-            from (
-              select elem.ord,
-                     left(btrim(coalesce(
-                       case when jsonb_typeof(elem.value) = 'string' then elem.value #>> '{}' end,
-                       elem.value->>'text',
-                       elem.value->>'content',
-                       elem.value->>'comment',
-                       elem.value->>'body'
-                     )), 160) as snippet
-              from jsonb_array_elements(v.raw->'comments') with ordinality as elem(value, ord)
-              where elem.ord <= 6
-            ) picked
-            where snippet is not null and snippet <> ''
+        (
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object('text', picked.text, 'likes', picked.likes)
+              order by picked.likes desc nulls last, picked.created_at desc nulls last, picked.id
+            ),
+            '[]'::jsonb
           )
-          else null
-        end as comment_texts
+          from (
+            select c.text, c.likes, c.created_at, c.id
+            from video_comments c
+            where c.video_id = v.id
+              and c.text is not null
+              and btrim(c.text) <> ''
+            order by c.likes desc nulls last, c.created_at desc nulls last, c.id
+            limit 6
+          ) picked
+        ) as top_comments
       from research_run_videos rv
       join videos v on v.id = rv.video_id
       join video_analyses a on a.video_id = rv.video_id
@@ -472,20 +483,62 @@ async function loadVideos(sql: Sql, runId: string, nicheId: string): Promise<Vid
   `;
 }
 
+async function countCommentsUsed(sql: Sql, runId: string, nicheId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    with analysed as (
+      select distinct v.id
+      from research_run_videos rv
+      join videos v on v.id = rv.video_id
+      join video_analyses a on a.video_id = rv.video_id
+        and a.is_latest = true
+        and a.status = 'complete'
+        and a.niche_id = ${nicheId}
+      where rv.run_id = ${runId}
+    )
+    select coalesce(sum(least(per_video.n, 6)), 0)::int as n
+    from (
+      select count(*)::int as n
+      from video_comments c
+      join analysed on analysed.id = c.video_id
+      where c.text is not null
+        and btrim(c.text) <> ''
+      group by c.video_id
+    ) per_video
+  `;
+  return Number(rows[0]?.n) || 0;
+}
+
+function promptComments(value: unknown): { text: string; likes: number | null }[] | null {
+  let source = value;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(source)) return null;
+  const comments: { text: string; likes: number | null }[] = [];
+  for (const item of source) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const body = text(record.text).slice(0, 300);
+    if (!body) continue;
+    const likes = num(record.likes);
+    comments.push({ text: body, likes: likes == null ? null : Math.round(likes) });
+    if (comments.length >= 6) break;
+  }
+  return comments.length > 0 ? comments : null;
+}
+
 function promptVideo(row: VideoRow) {
-  const comments = row.comment_texts
-    ? row.comment_texts
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-    : null;
   return {
     id: row.id,
     caption: row.caption,
     transcript: row.transcript,
     views: num(row.views),
     likes: num(row.likes),
-    comments: num(row.comments),
+    comment_count: num(row.comments),
     viral_score: num(row.viral_score),
     is_high_potential: row.is_high_potential === true,
     audience: row.audience,
@@ -499,7 +552,7 @@ function promptVideo(row: VideoRow) {
     tags: row.tags ?? [],
     value_types: row.value_types ?? null,
     cta_type: row.cta_type,
-    comment_texts: comments && comments.length > 0 ? comments : null,
+    comments: promptComments(row.top_comments),
   };
 }
 
@@ -546,7 +599,8 @@ function prepareInsights(
         if (!quoteIds[0] || !quote) continue;
         const key = `${quoteIds[0]}:${quote}`;
         if (quotes.some((item) => `${item.video_id}:${item.quote}` === key)) continue;
-        quotes.push({ video_id: quoteIds[0], quote });
+        const source = quoteSource(quoteRecord.source);
+        quotes.push(source ? { video_id: quoteIds[0], quote, source } : { video_id: quoteIds[0], quote });
       }
       const evidenceCount = videoIds.length;
       const weak = evidenceCount === 0;
@@ -614,9 +668,10 @@ export async function generateAudienceIntelligence(runId: string): Promise<Audie
   const run = await loadRun(sql, runId);
   if (!run) throw new AudienceNotFoundError('Research run was not found');
 
-  const [videoRows, stats] = await Promise.all([
+  const [videoRows, stats, commentCountUsed] = await Promise.all([
     loadVideos(sql, runId, run.project_id),
     categoryFrequencies({ nicheId: run.project_id, runId, window: 'run' }),
+    countCommentsUsed(sql, runId, run.project_id),
   ]);
   if (videoRows.length === 0) throw new AudienceInputError('This run has no analysed videos');
 
@@ -624,7 +679,8 @@ export async function generateAudienceIntelligence(runId: string): Promise<Audie
   const analysed = videoRows.length;
   const allowed = new Map(videos.map((video) => [video.id.toLowerCase(), video.id]));
   const highPotential = new Set(videos.filter((video) => video.is_high_potential).map((video) => video.id));
-  const commentsCollected = videos.some((video) => video.comment_texts != null && video.comment_texts.length > 0);
+  const commentsCollected = videos.some((video) => video.comments != null && video.comments.length > 0);
+  const signals = { comment_count_used: commentCountUsed };
 
   const ai = getAIProvider('intel');
   const result = await ai.completeJson<Record<string, unknown>>({
@@ -693,7 +749,7 @@ export async function generateAudienceIntelligence(runId: string): Promise<Audie
           ${item.highPotentialCount},
           ${item.videoIds.length > 0 ? tx.array(item.videoIds, UUID_ARRAY_OID) : tx`'{}'::uuid[]`},
           ${tx.json(item.quotes as never)},
-          ${null},
+          ${tx.json(signals as never)},
           ${item.confidence},
           ${item.observationLevel},
           ${item.rank},

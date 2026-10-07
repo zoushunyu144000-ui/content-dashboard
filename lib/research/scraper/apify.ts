@@ -2,8 +2,14 @@ import 'server-only';
 import { getServerEnv } from '@/lib/env.server';
 import { providerCacheKey, readProviderCache, writeProviderCache } from './cache';
 import { ScraperUnavailableError } from './errors';
-import { normalizeApifyTikTokItems } from './normalize/tiktok';
-import type { NormalizedVideo, ScrapeHandle, ScrapeStartInput, ScraperProvider } from './types';
+import { attachApifyComments, normalizeApifyTikTokItems } from './normalize/tiktok';
+import {
+  noteCommentFetchError,
+  type NormalizedVideo,
+  type ScrapeHandle,
+  type ScrapeStartInput,
+  type ScraperProvider,
+} from './types';
 
 const FAILED = new Set(['FAILED', 'ABORTED', 'TIMED-OUT', 'TIMED_OUT']);
 
@@ -27,6 +33,7 @@ export class ApifyProvider implements ScraperProvider {
           searchQueries: [input.keyword],
           searchSection: '/video',
           resultsPerPage: limit,
+          commentsPerPost: env.apifyCommentsPerPost,
           shouldDownloadVideos: false,
           shouldDownloadCovers: false,
           shouldDownloadSubtitles: false,
@@ -82,7 +89,13 @@ export class ApifyProvider implements ScraperProvider {
     const key = providerCacheKey('apify', endpoint, { clean: true });
     const cached = await readProviderCache(key);
     const items = cached ?? (await this.fetchItems(handle.datasetId, env.apifyToken, key));
-    return normalizeApifyTikTokItems(items);
+    const videos = normalizeApifyTikTokItems(items);
+    if (env.apifyCommentsPerPost > 0) {
+      const { payloads, error } = await this.fetchCommentPayloads(items, env.apifyToken);
+      attachApifyComments(videos, payloads);
+      if (error) noteCommentFetchError(videos, error);
+    }
+    return videos;
   }
 
   private async fetchItems(datasetId: string, token: string, key: string): Promise<unknown> {
@@ -93,5 +106,99 @@ export class ApifyProvider implements ScraperProvider {
     const items = await response.json();
     await writeProviderCache(key, 'apify', { datasetId, clean: true }, items);
     return items;
+  }
+
+  private async fetchCommentPayloads(
+    items: unknown,
+    token: string,
+  ): Promise<{ payloads: unknown[]; error: string | null }> {
+    const payloads: unknown[] = [];
+    const errors: string[] = [];
+    for (const target of commentDatasetTargets(asItems(items))) {
+      try {
+        const key = providerCacheKey('apify', target.endpoint, { format: 'json', clean: 1 });
+        let cached: unknown = null;
+        try {
+          cached = await readProviderCache(key);
+        } catch (err) {
+          console.error('[apify] comment cache read failed', err);
+        }
+        const body = cached ?? (await this.fetchCommentUrl(target.url, token, key));
+        payloads.push(...asItems(body));
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : 'comment dataset fetch failed');
+      }
+    }
+    return { payloads, error: errors.length ? errors.join('; ').slice(0, 500) : null };
+  }
+
+  private async fetchCommentUrl(url: string, token: string, key: string): Promise<unknown> {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(`Apify comments dataset failed (${response.status})`);
+    const items = await response.json();
+    try {
+      await writeProviderCache(key, 'apify', { url, format: 'json', clean: 1 }, items);
+    } catch (err) {
+      console.error('[apify] comment cache write failed', err);
+    }
+    return items;
+  }
+}
+
+function asItems(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  const record = payload as Record<string, unknown>;
+  if (Array.isArray(record.items)) return record.items;
+  if (Array.isArray(record.data)) return record.data;
+  return [];
+}
+
+function commentDatasetTargets(items: unknown[]): { url: string; endpoint: string }[] {
+  const seen = new Set<string>();
+  const targets: { url: string; endpoint: string }[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const rawValue = record.commentsDatasetUrl ?? record.commentsDatasetURL;
+    if (typeof rawValue !== 'string') continue;
+    const raw = rawValue.trim();
+    if (!raw) continue;
+    const url = commentsJsonUrl(raw);
+    if (!url) continue;
+    const id = datasetIdFrom(raw);
+    const dedupe = id || url;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    targets.push({
+      url,
+      endpoint: id ? `/v2/datasets/${id}/items` : url,
+    });
+  }
+  return targets;
+}
+
+function commentsJsonUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('clean', '1');
+    return url.toString();
+  } catch {
+    const id = datasetIdFrom(raw);
+    if (!id) return null;
+    return `https://api.apify.com/v2/datasets/${encodeURIComponent(id)}/items?format=json&clean=1`;
+  }
+}
+
+function datasetIdFrom(raw: string): string | null {
+  const match = raw.match(/datasets\/([^/?#]+)/i);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
   }
 }

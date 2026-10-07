@@ -11,6 +11,12 @@ export interface ReportQuote {
   video_id: string;
   quote: string;
   url: string | null;
+  source?: string | null;
+}
+
+export interface ReportCommentSnippet {
+  text: string;
+  likes: number | null;
 }
 
 export interface ReportInsight {
@@ -87,6 +93,7 @@ export interface ReportSourceVideo {
   saves: number | null;
   viral_score: number | null;
   summary: string | null;
+  top_comments?: ReportCommentSnippet[];
 }
 
 export interface ReportAudienceNarrative {
@@ -107,6 +114,8 @@ export interface ReportOverview {
   videos_analysed: number;
   high_potential: number;
   comments_collected: boolean;
+  comment_count?: number;
+  comment_video_count?: number;
 }
 
 export interface ReportViralPatterns {
@@ -207,8 +216,9 @@ function sectionOverview(overview: ReportOverview | undefined): string {
   lines.push(`Videos Collected 采集视频: ${fmtCount(overview.videos_collected)}`);
   lines.push(`Videos Deeply Analysed 深度分析: ${fmtCount(overview.videos_analysed)}`);
   lines.push(`High Potential Videos 高潜视频: ${fmtCount(overview.high_potential)}`);
+  lines.push(commentCollectionLine(overview));
   lines.push(`证据来源: ${overview.comments_collected
-    ? '已从 videos.raw 采集到评论正文，证据同时来自评论、字幕/文案/转写与视频分析。'
+    ? '已采集评论正文，证据同时来自评论、字幕/文案/转写与视频分析。'
     : COMMENTS_MISSING}`);
   return lines.join('\n');
 }
@@ -291,7 +301,7 @@ function formatInsight(item: ReportInsight): string {
     `Observation level 观察层级: ${show(item.observation_level)}`,
     'Quotes 引用:',
     quotes.length
-      ? quotes.map((quote) => `- "${quote.quote}"${quote.url ? ` — ${quote.url}` : ''}`).join('\n')
+      ? quotes.map((quote) => `- "${quote.quote}"${quote.source ? ` [${quote.source}]` : ''}${quote.url ? ` — ${quote.url}` : ''}`).join('\n')
       : '- （无引用）',
     `Description 说明: ${show(item.description)}`,
   ];
@@ -395,12 +405,30 @@ function sectionSources(items: ReportSourceVideo[] | undefined): string {
     `Views 播放: ${fmtCount(item.views)}`,
     `Likes 点赞: ${fmtCount(item.likes)}`,
     `Comments 评论: ${fmtCount(item.comments)}`,
+    formatTopComments(item.top_comments),
     `Shares 分享: ${fmtCount(item.shares)}`,
     `Saves 收藏: ${fmtCount(item.saves)}`,
     `Viral Score 爆款分: ${fmtScore(item.viral_score)}`,
     `AI Summary 分析摘要: ${show(item.summary)}`,
   ].join('\n')).join('\n\n');
   return section('16. Source Videos 来源视频', body);
+}
+
+function commentCollectionLine(overview: ReportOverview): string {
+  const count = Math.max(0, Math.round(overview.comment_count ?? 0));
+  const videos = Math.max(0, Math.round(overview.comment_video_count ?? 0));
+  if (count <= 0) return '评论采集: 未采集';
+  return `评论采集: ${count} 条评论（来自 ${videos} 个视频）`;
+}
+
+function formatTopComments(comments: ReportCommentSnippet[] | undefined): string {
+  const list = (comments ?? []).filter((item) => item.text.trim()).slice(0, 3);
+  if (list.length === 0) return '高赞评论: （无）';
+  const lines = list.map((item) => {
+    const likes = item.likes == null ? '' : `（赞 ${Math.round(item.likes)}）`;
+    return `- ${item.text}${likes}`;
+  });
+  return ['高赞评论:', ...lines].join('\n');
 }
 
 function section(heading: string, body: string): string {

@@ -51,7 +51,7 @@ import {
   resultLimit,
   type ConcreteScraper,
 } from '@/lib/research/scraper';
-import type { NormalizedVideo, ScrapeHandle } from '@/lib/research/scraper/types';
+import { readCommentFetchError, type NormalizedComment, type NormalizedVideo, type ScrapeHandle } from '@/lib/research/scraper/types';
 import { vttToPlainText } from '@/lib/research/scraper/vtt';
 
 type Sql = ReturnType<typeof getDb>;
@@ -495,6 +495,10 @@ async function normalize(sql: Sql, run: RunRow): Promise<string> {
       throw err;
     }
     const videos = await provider.fetchNormalized(toHandle(task));
+    const commentError = readCommentFetchError(videos);
+    if (commentError) {
+      await event(sql, run.id, 'normalizing', `Comment dataset fetch failed: ${commentError}`);
+    }
     // Scoring (and therefore viral rank) runs after this step, so the
     // "top viral AI_ANALYSIS_LIMIT" slice is not knowable yet. Download every
     // subtitle URL instead. Failures stay null and are ignored.
@@ -507,6 +511,9 @@ async function normalize(sql: Sql, run: RunRow): Promise<string> {
         values (${run.id}, ${videoId}, ${task.keyword_id}, ${task.id})
         on conflict (run_id, video_id) do nothing
       `;
+      if (video.collectedComments?.length) {
+        await storeVideoComments(sql, run.id, videoId, video.collectedComments);
+      }
     }
     const rawMeta = { ...(task.raw_meta || {}), normalized: true, videoCount: videos.length };
     await sql`update scrape_tasks set raw_meta = ${sql.json(rawMeta as never)} where id = ${task.id}`;
@@ -656,6 +663,52 @@ async function upsertVideo(sql: Sql, video: NormalizedVideo): Promise<string | n
     where id = ${existing[0].id}
   `;
   return existing[0].id;
+}
+
+async function storeVideoComments(
+  sql: Sql,
+  runId: string,
+  videoId: string,
+  comments: NormalizedComment[],
+): Promise<void> {
+  let failed = 0;
+  let first = '';
+  for (const comment of comments) {
+    const body = comment.text.trim();
+    const platformCommentId = comment.platformCommentId.trim();
+    if (!body || !platformCommentId) continue;
+    try {
+      await sql`
+        insert into video_comments (
+          video_id, platform_comment_id, text, likes, author, created_at_platform, raw
+        ) values (
+          ${videoId},
+          ${platformCommentId},
+          ${body},
+          ${comment.likes},
+          ${comment.author},
+          ${comment.createdAtPlatform},
+          ${sql.json((comment.raw ?? {}) as never)}
+        )
+        on conflict (video_id, platform_comment_id) do update set
+          text = excluded.text,
+          likes = excluded.likes,
+          author = excluded.author,
+          created_at_platform = coalesce(excluded.created_at_platform, video_comments.created_at_platform),
+          raw = excluded.raw
+      `;
+    } catch (err) {
+      failed += 1;
+      if (!first) first = err instanceof Error ? err.message : 'comment insert failed';
+    }
+  }
+  if (failed > 0) {
+    try {
+      await event(sql, runId, 'normalizing', `Comment store failed for video ${videoId} (${failed}): ${first}`);
+    } catch (err) {
+      console.error('[research] comment failure event was not stored', runId, err);
+    }
+  }
 }
 
 function num(value: unknown): number | null {

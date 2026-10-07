@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { normalizeApifyTikTokItem, normalizeApifyTikTokItems } from '../lib/research/scraper/normalize/tiktok';
+import { attachApifyComments, normalizeApifyTikTokItem, normalizeApifyTikTokItems } from '../lib/research/scraper/normalize/tiktok';
 import { normalizeTikHubAweme, normalizeTikHubSearch } from '../lib/research/scraper/normalize/tikhub';
 import { normalizeYouTubeFlatEntry } from '../lib/research/scraper/normalize/youtube';
 
@@ -59,6 +59,28 @@ const firstTrack = normalizeApifyTikTokItem({
   },
 });
 assert(firstTrack?.subtitleUrl === 'https://cdn.example/fr.vtt', 'apify falls back to the first subtitle link');
+
+const commented = normalizeApifyTikTokItems([
+  { id: '111', webVideoUrl: 'https://www.tiktok.com/@a/video/111', text: 'cap' },
+  { id: '222', webVideoUrl: 'https://www.tiktok.com/@b/video/222?lang=en', text: 'other' },
+]);
+attachApifyComments(commented, [
+  { text: 'nice', diggCount: 4, awemeId: '111', cid: 'c1', uniqueId: 'bob', createTimeISO: '2024-01-02T00:00:00.000Z', repliesToId: null },
+  { text: 'nice', diggCount: 4, awemeId: '111', cid: 'c1', uniqueId: 'bob' },
+  { text: 'other video', diggCount: 1, awemeId: '999', cid: 'c2' },
+  { text: 'via url', diggCount: 9, videoWebUrl: 'https://www.tiktok.com/@b/video/222?lang=en', cid: 'c3', uniqueId: 'ann' },
+  { text: 'reply', diggCount: 2, submittedVideoUrl: 'https://www.tiktok.com/@a/video/111', repliesToId: 'c1', uniqueId: 'cara' },
+  { authorMeta: { name: 'video' }, text: 'not a comment', playCount: 10 },
+]);
+const firstComments = commented[0]?.collectedComments ?? [];
+const secondComments = commented[1]?.collectedComments ?? [];
+assert(firstComments.length === 2, 'comments map by aweme id and dedupe cid');
+assert(firstComments[0]?.platformCommentId === 'c1' && firstComments[0]?.likes === 4 && firstComments[0]?.author === 'bob', 'comment cid, likes, and author');
+assert(firstComments[0]?.createdAtPlatform === '2024-01-02T00:00:00.000Z', 'createTimeISO maps to createdAtPlatform');
+assert(firstComments[1]?.text === 'reply' && firstComments[1]?.platformCommentId.startsWith('h:'), 'reply without cid still maps and gets a stable id');
+assert(secondComments.length === 1 && secondComments[0]?.text === 'via url' && secondComments[0]?.likes === 9, 'comment maps by video url');
+assert(!commented.some((video) => video.collectedComments?.some((comment) => comment.text === 'other video')), 'unmatched aweme id is dropped');
+assert(!commented.some((video) => video.collectedComments?.some((comment) => comment.text === 'not a comment')), 'video-shaped rows are not stored as comments');
 
 const fixedNow = new Date('2026-10-07T00:00:00.000Z');
 const tikhubRaw = JSON.parse(fs.readFileSync(tikhubPath, 'utf8'));

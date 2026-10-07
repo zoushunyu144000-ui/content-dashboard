@@ -1,3 +1,12 @@
+export interface NormalizedComment {
+  platformCommentId: string;
+  text: string;
+  likes: number | null;
+  author: string | null;
+  createdAtPlatform: string | null;
+  raw: unknown;
+}
+
 export interface NormalizedVideo {
   platform: string;
   platformVideoId: string | null;
@@ -21,6 +30,18 @@ export interface NormalizedVideo {
   transcript: string | null;
   subtitleUrl: string | null;
   raw: unknown;
+  collectedComments?: NormalizedComment[];
+}
+
+const commentFetchErrors = new WeakMap<NormalizedVideo[], string>();
+
+export function noteCommentFetchError(videos: NormalizedVideo[], message: string): void {
+  const trimmed = message.trim().slice(0, 500);
+  if (trimmed) commentFetchErrors.set(videos, trimmed);
+}
+
+export function readCommentFetchError(videos: NormalizedVideo[]): string | null {
+  return commentFetchErrors.get(videos) ?? null;
 }
 
 export interface ScrapeStartInput {

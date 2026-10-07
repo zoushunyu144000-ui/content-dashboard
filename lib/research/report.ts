@@ -5,6 +5,7 @@ import { getAIProvider } from '@/lib/research/ai/provider';
 import { taxonomyLabel, type AnalysisEnumColumn } from '@/lib/research/taxonomy';
 import {
   opportunityTypeLabel,
+  type ReportCommentSnippet,
   type ReportInsight,
   type ReportJson,
   type ReportOpportunity,
@@ -185,6 +186,7 @@ interface SourceRow {
   saves: number | string | null;
   viral_score: number | string | null;
   summary: string | null;
+  top_comments: unknown;
 }
 
 interface OpportunityRow {
@@ -405,6 +407,7 @@ async function assembleReport(sql: Sql, run: RunRow): Promise<ReportJson> {
       saves: num(row.saves),
       viral_score: num(row.viral_score),
       summary: row.summary,
+      top_comments: parseCommentSnippets(row.top_comments, 3),
     })),
   };
 }
@@ -415,6 +418,8 @@ async function loadOverview(sql: Sql, run: RunRow): Promise<ReportOverview> {
     videos_analysed: number | string | null;
     high_potential: number | string | null;
     comments_collected: boolean | null;
+    comment_count: number | string | null;
+    comment_video_count: number | string | null;
   }[]>`
     select count(*)::int as videos_collected,
            count(a.video_id)::int as videos_analysed,
@@ -425,7 +430,20 @@ async function loadOverview(sql: Sql, run: RunRow): Promise<ReportOverview> {
              or (jsonb_typeof(v.raw->'commentList') = 'array' and jsonb_array_length(v.raw->'commentList') > 0)
              or (jsonb_typeof(v.raw->'commentsData') = 'array' and jsonb_array_length(v.raw->'commentsData') > 0)
              or (jsonb_typeof(v.raw->'comment_texts') = 'array' and jsonb_array_length(v.raw->'comment_texts') > 0)
-           ), false) as comments_collected
+             or exists (select 1 from video_comments c where c.video_id = v.id)
+           ), false) as comments_collected,
+           (
+             select count(*)::int
+             from video_comments c
+             join research_run_videos rv_c on rv_c.video_id = c.video_id
+             where rv_c.run_id = ${run.id}
+           ) as comment_count,
+           (
+             select count(distinct c.video_id)::int
+             from video_comments c
+             join research_run_videos rv_c on rv_c.video_id = c.video_id
+             where rv_c.run_id = ${run.id}
+           ) as comment_video_count
     from research_run_videos rv
     join videos v on v.id = rv.video_id
     left join lateral (
@@ -459,7 +477,9 @@ async function loadOverview(sql: Sql, run: RunRow): Promise<ReportOverview> {
     videos_collected: int(count?.videos_collected),
     videos_analysed: int(count?.videos_analysed),
     high_potential: int(count?.high_potential),
-    comments_collected: Boolean(count?.comments_collected),
+    comments_collected: Boolean(count?.comments_collected) || int(count?.comment_count) > 0,
+    comment_count: int(count?.comment_count),
+    comment_video_count: int(count?.comment_video_count),
   };
 }
 
@@ -583,7 +603,25 @@ async function loadSources(sql: Sql, runId: string): Promise<SourceRow[]> {
            v.shares::float8 as shares,
            v.saves::float8 as saves,
            rv.viral_score::float8 as viral_score,
-           a.summary
+           a.summary,
+           (
+             select coalesce(
+               jsonb_agg(
+                 jsonb_build_object('text', picked.text, 'likes', picked.likes)
+                 order by picked.likes desc nulls last, picked.created_at desc nulls last, picked.id
+               ),
+               '[]'::jsonb
+             )
+             from (
+               select c.text, c.likes, c.created_at, c.id
+               from video_comments c
+               where c.video_id = v.id
+                 and c.text is not null
+                 and btrim(c.text) <> ''
+               order by c.likes desc nulls last, c.created_at desc nulls last, c.id
+               limit 3
+             ) picked
+           ) as top_comments
     from research_run_videos rv
     join videos v on v.id = rv.video_id
     left join lateral (
@@ -789,9 +827,38 @@ function parseQuotes(value: unknown): ReportQuote[] {
     const videoId = typeof record.video_id === 'string' ? record.video_id : '';
     const quote = typeof record.quote === 'string' ? record.quote.trim() : '';
     if (!quote) continue;
-    quotes.push({ video_id: videoId, quote, url: null });
+    const source = typeof record.source === 'string' ? record.source.trim().toLowerCase() : '';
+    quotes.push({
+      video_id: videoId,
+      quote,
+      url: null,
+      ...(source === 'caption' || source === 'transcript' || source === 'comment' ? { source } : {}),
+    });
   }
   return quotes;
+}
+
+function parseCommentSnippets(value: unknown, limit: number): ReportCommentSnippet[] {
+  let source = value;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(source)) return [];
+  const comments: ReportCommentSnippet[] = [];
+  for (const item of source) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const text = typeof record.text === 'string' ? record.text.trim() : '';
+    if (!text) continue;
+    const likes = num(record.likes);
+    comments.push({ text: text.slice(0, 500), likes: likes == null ? null : Math.round(likes) });
+    if (comments.length >= limit) break;
+  }
+  return comments;
 }
 
 function parseEvidence(value: unknown): ReportOpportunityEvidence | null {
