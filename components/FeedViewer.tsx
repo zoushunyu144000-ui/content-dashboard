@@ -46,14 +46,32 @@ interface FeedViewerProps {
   initialVideoId?: string;
 }
 
+function tiktokPlatformVideoId(video: FeedVideo): string | null {
+  if (video.platform === 'youtube') return null;
+  const fromUrl = video.url?.match(/\/video\/(\d+)/)?.[1]
+    || video.embed_url?.match(/\/(?:video|player\/v1|embed\/v2)\/(\d+)/)?.[1]
+    || '';
+  if (video.platform === 'tiktok' || video.platform == null) {
+    return video.platform_video_id?.trim() || fromUrl || null;
+  }
+  if (/tiktok\.com/i.test(video.url || '') || /tiktok\.com/i.test(video.embed_url || '')) {
+    return fromUrl || null;
+  }
+  return null;
+}
+
+function tiktokPlayerSrc(id: string): string {
+  return `https://www.tiktok.com/player/v1/${id}?autoplay=0&controls=1&description=0&music_info=0&rel=0`;
+}
+
 function embedSrc(video: FeedVideo): string | null {
-  const id = video.platform_video_id;
+  const id = video.platform_video_id?.trim() || '';
   if (video.platform === 'youtube' && id) {
     return `https://www.youtube.com/embed/${encodeURIComponent(id)}?playsinline=1&rel=0`;
   }
-  if (id && (video.platform === 'tiktok' || video.platform == null)) {
-    return `https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}`;
-  }
+  const tiktokId = tiktokPlatformVideoId(video);
+  if (tiktokId) return tiktokPlayerSrc(tiktokId);
+  if (video.embed_url && /tiktok\.com/i.test(video.embed_url)) return null;
   return video.embed_url;
 }
 
@@ -102,7 +120,7 @@ function SlideMedia({ video, mountEmbed, active }: { video: FeedVideo; mountEmbe
         src={embed}
         title={video.caption || t('feed.embeddedVideo')}
         className="h-full w-full border-0 bg-black"
-        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         allowFullScreen
         onError={() => setBroken(true)}
       />
@@ -117,7 +135,9 @@ function SlideMedia({ video, mountEmbed, active }: { video: FeedVideo; mountEmbe
       ) : (
         <div className="flex h-full items-center justify-center text-sm text-muted">{t('feed.noPreview')}</div>
       )}
-      {video.url ? (
+      {embed ? (
+        <span className="pointer-events-none absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-lg text-white" aria-hidden="true">▶</span>
+      ) : video.url ? (
         <a className="btn-primary absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" href={video.url} target="_blank" rel="noreferrer">
           {t('feed.openOriginal')}
         </a>

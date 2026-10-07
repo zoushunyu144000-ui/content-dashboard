@@ -22,6 +22,8 @@ import {
   readValueLevels,
   scoreText,
   textOrDash,
+  tiktokPlatformVideoId,
+  tiktokPlayerSrc,
   valueLevelLabel,
   valueTypeLabel,
   type LibraryVideo,
@@ -46,6 +48,47 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div>
       <dt className="text-[11px] text-muted">{label}</dt>
       <dd className="mt-1 whitespace-pre-wrap break-words text-sm">{children}</dd>
+    </div>
+  );
+}
+
+function DrawerMedia({ video }: { video: LibraryVideo }) {
+  const [broken, setBroken] = useState(false);
+  const tiktokId = tiktokPlatformVideoId(video);
+  if (tiktokId) {
+    return (
+      <div className="mb-4 flex justify-center">
+        <iframe
+          src={tiktokPlayerSrc(tiktokId)}
+          title={video.caption?.trim() || 'TikTok'}
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          className="w-full rounded-xl md:w-[min(100%,360px)]"
+          style={{ aspectRatio: '9/16', maxHeight: '70vh' }}
+        />
+      </div>
+    );
+  }
+  const showThumb = Boolean(video.thumbnail_url) && !broken;
+  return (
+    <div className="mb-4 flex justify-center">
+      {showThumb ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={video.thumbnail_url || undefined}
+          alt={video.caption?.trim() || t('common.video')}
+          className="w-full rounded-xl bg-black object-cover md:w-[min(100%,360px)]"
+          style={{ aspectRatio: '9/16', maxHeight: '70vh' }}
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div
+          className="flex w-full items-center justify-center rounded-xl bg-black text-xs text-muted md:w-[min(100%,360px)]"
+          style={{ aspectRatio: '9/16', maxHeight: '70vh' }}
+        >
+          {t('feed.noPreview')}
+        </div>
+      )}
     </div>
   );
 }
@@ -168,7 +211,9 @@ export default function AnalysisDrawer({ video, nicheId, loading, missing, onClo
           {!video && loading ? <p className="text-sm text-muted">正在加载…</p> : null}
           {!video && missing ? <p className="text-sm text-muted">未找到该视频。它可能不在当前项目的前 100 条里。</p> : null}
           {video ? (
-            <dl className="space-y-4">
+            <>
+              <DrawerMedia key={video.id} video={video} />
+              <dl className="space-y-4">
               <Field label="目标受众">
                 {textOrDash(video.audience)}
                 {video.audience_category ? <span className="ml-2 text-xs text-muted">{labelOf(AUDIENCE_LABELS, video.audience_category)}</span> : null}
@@ -211,7 +256,8 @@ export default function AnalysisDrawer({ video, nicheId, loading, missing, onClo
                 </dd>
               </div>
               <Field label="提示词版本">{textOrDash(video.prompt_version)}</Field>
-            </dl>
+              </dl>
+            </>
           ) : null}
         </div>
 
@@ -228,7 +274,7 @@ export default function AnalysisDrawer({ video, nicheId, loading, missing, onClo
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
               {video.url ? (
-                <a href={video.url} target="_blank" rel="noreferrer noopener" className="btn-ghost">
+                <a href={video.url} target="_blank" rel="noreferrer noopener" className="text-xs text-muted underline-offset-2 hover:underline">
                   {t('feed.openOriginal')}
                 </a>
               ) : (

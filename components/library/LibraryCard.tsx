@@ -28,18 +28,24 @@ export default function LibraryCard({ video, onOpen }: LibraryCardProps) {
       onClick={() => onOpen(video.id)}
       className="panel flex h-full w-full flex-col overflow-hidden p-0 text-left font-[inherit] text-cream transition hover:bg-card-hover"
     >
-      {showThumb ? (
-        <img
-          src={video.thumbnail_url || undefined}
-          alt={video.caption?.trim() || t('common.video')}
-          className="aspect-[4/5] w-full bg-black object-cover"
-          onError={() => setBroken(true)}
-        />
-      ) : (
-        <div className="flex aspect-[4/5] items-center justify-center bg-black text-xs text-muted">
-          {t('feed.noPreview')}
-        </div>
-      )}
+      <div className="relative">
+        {showThumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={video.thumbnail_url || undefined}
+            alt={video.caption?.trim() || t('common.video')}
+            className="aspect-[4/5] w-full bg-black object-cover"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <div className="flex aspect-[4/5] items-center justify-center bg-black text-xs text-muted">
+            {t('feed.noPreview')}
+          </div>
+        )}
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-lg text-white">▶</span>
+        </span>
+      </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
         <p className="line-clamp-2 text-sm">{video.caption?.trim() || '—'}</p>
         <p className="truncate text-xs text-muted">

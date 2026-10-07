@@ -19,6 +19,7 @@ import {
 export interface LibraryVideo {
   id: string;
   platform: string;
+  platform_video_id?: string | null;
   url: string | null;
   thumbnail_url: string | null;
   caption: string | null;
@@ -182,6 +183,22 @@ export function platformLabel(platform: string | null | undefined): string {
   if (platform === 'youtube') return 'YouTube';
   if (platform === 'instagram') return 'Instagram';
   return platform;
+}
+
+export function tiktokPlatformVideoId(video: {
+  platform?: string | null;
+  platform_video_id?: string | null;
+  url?: string | null;
+}): string | null {
+  if (video.platform !== 'tiktok') return null;
+  const direct = video.platform_video_id?.trim();
+  if (direct) return direct;
+  const match = video.url?.match(/\/video\/(\d+)/);
+  return match?.[1] ?? null;
+}
+
+export function tiktokPlayerSrc(id: string): string {
+  return `https://www.tiktok.com/player/v1/${id}?autoplay=0&controls=1&description=0&music_info=0&rel=0`;
 }
 
 export function scoreText(value: number | null | undefined): string {
