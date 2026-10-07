@@ -183,8 +183,8 @@ interface EvidenceRow {
   evidence_video_ids: string[] | null;
 }
 
-const TOPIC_OR_EMPTY = [...TOPIC_CATEGORIES, ''] as const;
-const HOOK_OR_EMPTY = [...HOOK_TYPES, ''] as const;
+const TOPIC_OR_EMPTY = [...TOPIC_CATEGORIES, 'any'] as const;
+const HOOK_OR_EMPTY = [...HOOK_TYPES, 'any'] as const;
 
 const OPPORTUNITY_SCHEMA: JsonSchema = {
   type: 'object',
@@ -280,7 +280,7 @@ function enumKey(value: unknown, keys: readonly string[]): string | null {
 function enumOrBlank(value: unknown, keys: readonly string[]): string | null {
   if (typeof value !== 'string') return null;
   const key = value.trim();
-  if (!key) return '';
+  if (!key || key === 'any') return '';
   return keys.includes(key) ? key : null;
 }
 
