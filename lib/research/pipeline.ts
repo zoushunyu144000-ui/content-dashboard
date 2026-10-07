@@ -51,6 +51,7 @@ import {
   resultLimit,
   type ConcreteScraper,
 } from '@/lib/research/scraper';
+import { abortApifyRun } from '@/lib/research/scraper/apify';
 import { readCommentFetchError, type NormalizedComment, type NormalizedVideo, type ScrapeHandle } from '@/lib/research/scraper/types';
 import { vttToPlainText } from '@/lib/research/scraper/vtt';
 
@@ -89,8 +90,8 @@ interface TaskRow {
   raw_meta: Record<string, unknown> | null;
 }
 
-const SCRAPE_TIMEOUT_MS = 15 * 60 * 1000;
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+const TASK_DONE = new Set(['succeeded', 'failed']);
 
 export async function tickOnce(workerId: string): Promise<{ didWork: boolean; runId: string | null; status: string | null }> {
   const sql = getDb();
@@ -267,34 +268,71 @@ async function expandKeywords(sql: Sql, run: RunRow): Promise<string> {
   return 'scraping';
 }
 
+function scrapeTimeoutMs(): number {
+  return getServerEnv().scrapeTimeoutMin * 60 * 1000;
+}
+
+function scrapeProgress(tasks: TaskRow[]): number {
+  if (tasks.length === 0) return 35;
+  const finished = tasks.filter((task) => TASK_DONE.has(task.status)).length;
+  const value = 35 + (finished / tasks.length) * 25;
+  return Math.max(35, Math.min(60, Math.round(value)));
+}
+
+function apifyStatusPhrase(status: string): string {
+  switch (status.toUpperCase()) {
+    case 'READY':
+      return '排队中 (READY)';
+    case 'RUNNING':
+      return '运行中';
+    case 'SUCCEEDED':
+      return '完成';
+    default:
+      return status;
+  }
+}
+
+function apifyTaskMessage(index: number, total: number, status: string): string {
+  return `Apify 任务 ${index}/${total} ${apifyStatusPhrase(status)}`;
+}
+
+async function announceApifyStatus(
+  sql: Sql,
+  runId: string,
+  task: TaskRow,
+  index: number,
+  total: number,
+  handle: ScrapeHandle,
+): Promise<void> {
+  const status = typeof handle.rawMeta?.apifyStatus === 'string' ? handle.rawMeta.apifyStatus : '';
+  if (!status) return;
+  const announced = task.raw_meta?.apifyStatusAnnounced;
+  if (announced === status) return;
+  await event(sql, runId, 'scraping', apifyTaskMessage(index, total, status));
+  handle.rawMeta = { ...(handle.rawMeta || {}), apifyStatus: status, apifyStatusAnnounced: status };
+}
+
 async function scrape(sql: Sql, run: RunRow): Promise<string> {
   const config = configOf(run);
   if (!config.providerChain || config.providerChain.length === 0) {
     config.providerChain = providerChain(config.scraperProvider);
     config.providerIndex = 0;
-    config.scrapeStartedAt = new Date().toISOString();
   }
   if (!getServerEnv().youtubeProviderEnabled) {
     config.providerChain = config.providerChain.filter((name) => name !== 'youtube');
     if (config.providerChain.length === 0) config.providerChain = providerChain('apify');
   }
+  if (!config.scrapeStartedAt) config.scrapeStartedAt = new Date().toISOString();
   const index = config.providerIndex ?? 0;
   const providerName = config.providerChain[index];
   if (!providerName) return failRun(sql, run, 'No scraper provider is available');
 
-  const started = new Date(config.scrapeStartedAt || Date.now()).getTime();
-  if (Date.now() - started > SCRAPE_TIMEOUT_MS) {
-    const won = await sql<{ n: number }[]>`
-      select count(*)::int as n from scrape_tasks
-      where run_id = ${run.id} and status = 'succeeded'
-    `;
-    if (Number(won[0]?.n || 0) > 0) return moveToNormalizing(sql, run, config);
-    return failRun(sql, run, 'Scraping exceeded 15 minutes');
-  }
+  const startedMs = new Date(config.scrapeStartedAt).getTime();
+  const started = Number.isFinite(startedMs) ? startedMs : Date.now();
 
   await sql`
     update research_runs
-    set status = 'scraping', current_step = 'scraping', progress = 35,
+    set status = 'scraping', current_step = 'scraping', progress = greatest(progress, 35),
         scraper_provider = ${providerName}, config = ${sql.json(config as never)}
     where id = ${run.id}
   `;
@@ -314,10 +352,16 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
     if (err instanceof ScraperUnavailableError) return fallback(sql, run, config, err.message);
     throw err;
   }
-  for (const task of tasks) {
+
+  // Resume in-flight actor runs from persisted external_run_id / dataset_id after a restart.
+  for (let taskIndex = 0; taskIndex < tasks.length; taskIndex += 1) {
+    const task = tasks[taskIndex];
     if (task.status !== 'running' || !task.external_run_id) continue;
     try {
       const polled = await provider.poll(toHandle(task));
+      if (providerName === 'apify') {
+        await announceApifyStatus(sql, run.id, task, taskIndex + 1, tasks.length, polled);
+      }
       await saveHandle(sql, task, polled);
     } catch (err) {
       if (err instanceof InsufficientBalanceError) {
@@ -329,11 +373,19 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
   }
 
   tasks = await loadTasks(sql, run.id, providerName);
+  if (Date.now() - started > scrapeTimeoutMs()) {
+    return timeoutScrape(sql, run, config);
+  }
+
   const pending = tasks.find((task) => task.status === 'pending');
   if (pending) {
     const limit = Number(pending.raw_meta?.limit || resultLimit(providerName, 0));
     try {
       const handle = await provider.start({ keyword: pending.query, platform: pending.platform, limit });
+      if (providerName === 'apify') {
+        const taskIndex = Math.max(0, tasks.findIndex((item) => item.id === pending.id));
+        await announceApifyStatus(sql, run.id, pending, taskIndex + 1, tasks.length, handle);
+      }
       await saveHandle(sql, pending, handle, true);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'scraper start failed';
@@ -347,9 +399,11 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
 
   tasks = await loadTasks(sql, run.id, providerName);
   if (tasks.some((task) => task.status === 'pending' || task.status === 'running')) {
+    const progress = scrapeProgress(tasks);
     await sql`
       update research_runs
-      set run_after = now() + interval '15 seconds',
+      set progress = ${progress},
+          run_after = now() + interval '15 seconds',
           config = ${sql.json(config as never)},
           locked_at = null,
           locked_by = null
@@ -360,6 +414,35 @@ async function scrape(sql: Sql, run: RunRow): Promise<string> {
   if (tasks.some((task) => task.status === 'succeeded')) return moveToNormalizing(sql, run, config);
   const reason = tasks.map((task) => task.error).filter(Boolean).join('; ') || `${providerName} returned no videos`;
   return fallback(sql, run, config, reason);
+}
+
+async function timeoutScrape(sql: Sql, run: RunRow, config: RunConfig): Promise<string> {
+  const open = await sql<TaskRow[]>`
+    select id, keyword_id, scraper_provider, platform, query, status, external_run_id, dataset_id, error, raw_meta
+    from scrape_tasks
+    where run_id = ${run.id} and status in ('pending', 'running')
+    order by created_at
+  `;
+  for (const task of open) {
+    if (task.scraper_provider === 'apify' && task.external_run_id) {
+      try {
+        await abortApifyRun(task.external_run_id);
+      } catch (err) {
+        console.error('[apify] abort failed', task.external_run_id, err);
+      }
+    }
+    const error = task.scraper_provider === 'apify' ? 'Apify 超时（排队或运行过久）' : '采集超时';
+    await markTask(sql, task.id, 'failed', error);
+  }
+  const won = await sql<{ n: number }[]>`
+    select count(*)::int as n from scrape_tasks
+    where run_id = ${run.id} and status = 'succeeded'
+  `;
+  if (Number(won[0]?.n || 0) > 0) {
+    await event(sql, run.id, 'scraping', '部分关键词超时，已用已完成的数据继续');
+    return moveToNormalizing(sql, run, config);
+  }
+  return failRun(sql, run, 'Apify 采集超时');
 }
 
 async function createTasks(sql: Sql, runId: string, providerName: ConcreteScraper): Promise<void> {
@@ -457,7 +540,7 @@ async function fallback(sql: Sql, run: RunRow, config: RunConfig, reason: string
 async function moveToNormalizing(sql: Sql, run: RunRow, config: RunConfig): Promise<string> {
   await sql`
     update research_runs
-    set status = 'normalizing', current_step = 'normalizing', progress = 50,
+    set status = 'normalizing', current_step = 'normalizing', progress = greatest(progress, 50),
         config = ${sql.json(config as never)},
         run_after = null, locked_at = null, locked_by = null, error_message = null
     where id = ${run.id}

@@ -21,8 +21,13 @@ export class ApifyProvider implements ScraperProvider {
     if (!env.apifyToken) throw new ScraperUnavailableError('APIFY_TOKEN is not configured');
     const actor = env.apifyTiktokActor.replace(/\//g, '~');
     const limit = Math.max(1, input.limit);
+    const params = new URLSearchParams({
+      maxItems: String(limit),
+      timeout: '300',
+      memory: String(env.apifyRunMemoryMb),
+    });
     const response = await fetch(
-      `https://api.apify.com/v2/acts/${encodeURIComponent(actor)}/runs?maxItems=${limit}&timeout=300`,
+      `https://api.apify.com/v2/acts/${encodeURIComponent(actor)}/runs?${params.toString()}`,
       {
         method: 'POST',
         headers: {
@@ -145,6 +150,22 @@ export class ApifyProvider implements ScraperProvider {
     }
     return items;
   }
+}
+
+export async function abortApifyRun(externalRunId: string): Promise<void> {
+  if (!externalRunId) return;
+  const env = getServerEnv();
+  if (!env.apifyToken) throw new ScraperUnavailableError('APIFY_TOKEN is not configured');
+  const response = await fetch(
+    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(externalRunId)}/abort`,
+    { method: 'POST', headers: { Authorization: `Bearer ${env.apifyToken}` } },
+  );
+  if (response.ok || response.status === 400 || response.status === 404) {
+    await response.arrayBuffer().catch(() => undefined);
+    return;
+  }
+  const detail = await response.text().catch(() => '');
+  throw new ScraperUnavailableError(`Apify abort failed (${response.status}) ${detail}`.slice(0, 300));
 }
 
 function asItems(payload: unknown): unknown[] {

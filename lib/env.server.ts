@@ -44,6 +44,8 @@ export function getServerEnv() {
     apifyResultsPerKeyword: Math.max(1, int('APIFY_RESULTS_PER_KEYWORD', 10)),
     apifyMaxKeywordsPerRun: Math.max(1, int('APIFY_MAX_KEYWORDS_PER_RUN', 3)),
     apifyCommentsPerPost: Math.max(0, int('APIFY_COMMENTS_PER_POST', 0)),
+    apifyRunMemoryMb: Math.max(128, int('APIFY_RUN_MEMORY_MB', 1024)),
+    scrapeTimeoutMin: Math.max(1, int('SCRAPE_TIMEOUT_MIN', 15)),
     tikhubApiKey: str('TIKHUB_API_KEY'),
     tikhubBaseUrl: (str('TIKHUB_BASE_URL') || 'https://api.tikhub.io').replace(/\/$/, ''),
     tikhubMaxRequestsPerRun: Math.max(1, int('TIKHUB_MAX_REQUESTS_PER_RUN', 2)),
