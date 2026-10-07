@@ -25,6 +25,7 @@ import {
   type VideoAnalysisDraft,
   type VideoAnalysisInput,
 } from '@/lib/research/ai/tasks/video-analysis';
+import { generateAudienceIntelligence } from '@/lib/research/audience';
 import { generateRunIntelligence } from '@/lib/research/intelligence';
 import { finalizeInsightGroups, groupShare, sourceKey } from '@/lib/research/insight-groups';
 import { RELEVANCE_MIN } from '@/lib/research/relevance';
@@ -1086,10 +1087,37 @@ async function writeInsights(sql: Sql, run: RunRow, options?: { preserveStatus?:
     where id = ${run.id}
   `;
   await event(sql, run.id, 'completed', 'Research run completed');
-  void generateRunIntelligence(run.id).catch((err) => {
-    console.error('[intelligence] run report failed', run.id, err);
-  });
+  const finishedRunId = run.id;
+  void (async () => {
+    try {
+      await generateRunIntelligence(finishedRunId);
+    } catch (err) {
+      console.error('[intelligence] run report failed', finishedRunId, err);
+    }
+    try {
+      await generateAudienceIntelligence(finishedRunId);
+    } catch (err) {
+      console.error('[audience] generation failed', finishedRunId, err);
+    }
+    try {
+      await generateResearchReportIfExported(finishedRunId);
+    } catch (err) {
+      console.error('[report] generation failed', finishedRunId, err);
+    }
+  })();
   return 'completed';
+}
+
+async function generateResearchReportIfExported(runId: string): Promise<void> {
+  try {
+    const report = await import('@/lib/research/report');
+    if (typeof report.generateResearchReport !== 'function') return;
+    await report.generateResearchReport(runId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    if (/cannot find module|module not found|ERR_MODULE_NOT_FOUND/i.test(message)) return;
+    throw err;
+  }
 }
 
 export class ReclusterError extends Error {
