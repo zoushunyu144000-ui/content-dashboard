@@ -182,49 +182,64 @@ export function renderReportTxt(reportJson: ReportJson, executiveSummary: string
   const report = reportJson;
   const summary = textOrNull(executiveSummary) ?? textOrNull(report.executive_summary);
   const sections = [
+    sectionPreface(report),
     sectionOverview(report.overview),
     section('2. Executive Summary 执行摘要', summary ? summary : empty('模型未返回执行摘要。报告 status 为 partial 时，错误记在 report_json.errors。')),
     sectionAudience(report.target_audience),
-    sectionInsights('4. Audience Pain Points 受众痛点', report.pain_points, 'audience_insights 中没有 status=active 的 pain_point。'),
-    sectionInsights('5. Desires 欲望', report.desires, 'audience_insights 中没有 status=active 的 desire。'),
-    sectionNeeds(report.needs),
-    sectionInsights('7. Objections 异议', report.objections, 'audience_insights 中没有 status=active 的 objection。'),
-    sectionInsights('8. Questions 问题', report.questions, 'audience_insights 中没有 status=active 的 question。'),
-    sectionInsights('9. Emotional Triggers 情绪触发', report.emotional_triggers, 'audience_insights 中没有 status=active 的 emotional_trigger。'),
-    sectionInsights('10. Misconceptions 误解', report.misconceptions, 'audience_insights 中没有 status=active 的 misconception。'),
-    sectionInsights('11. Jobs To Be Done 待完成工作', report.jobs_to_be_done, 'audience_insights 中没有 status=active 的 job_to_be_done。'),
+    sectionInsights('4. Pain Points 痛点', report.pain_points, 'audience_insights 中没有 status=active 的 pain_point。'),
+    sectionNeedsAndDesires(report.needs, report.desires),
+    sectionInsights('6. Objections 异议', report.objections, 'audience_insights 中没有 status=active 的 objection。'),
+    sectionInsights('7. Audience Questions 受众问题', report.questions, 'audience_insights 中没有 status=active 的 question。'),
+    sectionInsights('8. Emotional Triggers 情绪触发', report.emotional_triggers, 'audience_insights 中没有 status=active 的 emotional_trigger。'),
+    sectionInsights('9. Misconceptions 误解', report.misconceptions, 'audience_insights 中没有 status=active 的 misconception。'),
+    sectionInsights('10. Jobs To Be Done 待完成工作', report.jobs_to_be_done, 'audience_insights 中没有 status=active 的 job_to_be_done。'),
     sectionPatterns(report.viral_patterns, report.overview?.videos_analysed ?? 0),
     sectionWhy(report.why_content_works),
-    sectionInsights('14. Content Gaps 内容缺口', report.content_gaps, 'audience_insights 中没有 status=active 的 content_gap。'),
+    sectionInsights('13. Content Gaps 内容缺口', report.content_gaps, 'audience_insights 中没有 status=active 的 content_gap。'),
     sectionOpportunities(report.opportunities),
     sectionSources(report.source_videos),
   ];
   return `${sections.join('\n\n')}\n`;
 }
 
+function sectionPreface(report: ReportJson): string {
+  const overview = report.overview;
+  const market = textOrNull(overview?.target_market);
+  const primary = textOrNull(report.target_audience?.primary);
+  const audience = market && primary
+    ? `${market}. Primary 主要人群: ${primary}`
+    : (market || primary || '（未提供）');
+  return guardNumberedLines([
+    'Preface 前言',
+    'This file is one research-run report for another AI. UTF-8 plain text only. No HTML. It does not depend on the website. Use sections 1-15 below. Do not invent numbers, videos, quotes, or people.',
+    '本文件是单次研究运行的报告，供另一个 AI 继续使用。只有 UTF-8 纯文本，没有 HTML，不依赖网页。只用下面第 1 到 15 节。不要编造数字、视频、引用或人群。',
+    `Niche / Topic 赛道与主题: ${show(overview?.project)} / ${show(overview?.topic)}`,
+    `Target Audience 目标受众: ${audience}. 完整分段在第 3 节。`,
+    'Evidence counting 证据计数: Overview counts are SQL on research_run_videos for this run. videos_collected = count(*). videos_analysed = count of videos with a latest video_analyses row (is_latest, status=complete). high_potential = count(*) filter (where is_high_potential). An insight Evidence value is audience_insights.evidence_count where status=active: how many cited video ids belong to those analysed videos. Frequency = evidence_count / videos_analysed * 100, stored as frequency_pct. The high-potential count on an insight is how many of those evidence videos are high potential. Viral pattern counts are SQL counts of the latest complete analysis per video, grouped by hook_type, topic_category, content_structure, content_format, emotion, and cta_type. A pattern percent = that count / videos_analysed. Missing data is the line （本次无数据） plus a reason.',
+    'Observation levels 观察层级: observed = stated directly in a caption, transcript, comment, or engagement figure. inferred = derived from more than one of those facts. speculative = weak evidence; an insight with zero evidence videos is stored as speculative. confidence is high, medium, or low and follows evidence strength. Only the fifteen section headings start with "N. ". Items inside sections use "- " or "[N]".',
+  ].join('\n'));
+}
+
 function sectionOverview(overview: ReportOverview | undefined): string {
-  const lines = ['1. Research Overview 研究概览'];
-  if (!overview) {
-    lines.push(empty('报告 JSON 缺少 overview。'));
-    return lines.join('\n');
-  }
-  lines.push(`Project 项目: ${show(overview.project)}`);
-  lines.push(`Research Topic 研究主题: ${show(overview.topic)}`);
-  lines.push(`Target Market 目标市场: ${show(overview.target_market)}`);
-  lines.push(`Date 日期: ${show(overview.date)}`);
-  lines.push(`Platforms 平台: ${overview.platforms?.length ? overview.platforms.join(', ') : '（未提供）'}`);
-  lines.push(`Videos Collected 采集视频: ${fmtCount(overview.videos_collected)}`);
-  lines.push(`Videos Deeply Analysed 深度分析: ${fmtCount(overview.videos_analysed)}`);
-  lines.push(`High Potential Videos 高潜视频: ${fmtCount(overview.high_potential)}`);
-  lines.push(commentCollectionLine(overview));
-  lines.push(`证据来源: ${overview.comments_collected
-    ? '已采集评论正文，证据同时来自评论、字幕/文案/转写与视频分析。'
-    : COMMENTS_MISSING}`);
-  return lines.join('\n');
+  if (!overview) return section('1. Research Overview 研究概览', empty('报告 JSON 缺少 overview。'));
+  const lines = [
+    `Project 项目: ${show(overview.project)}`,
+    `Research Topic 研究主题: ${show(overview.topic)}`,
+    `Target Market 目标市场: ${show(overview.target_market)}`,
+    `Date 日期: ${show(overview.date)}`,
+    `Platforms 平台: ${overview.platforms?.length ? overview.platforms.join(', ') : '（未提供）'}`,
+    `Videos Collected 采集视频: ${fmtCount(overview.videos_collected)}`,
+    `Videos Deeply Analysed 深度分析: ${fmtCount(overview.videos_analysed)}`,
+    `High Potential Videos 高潜视频: ${fmtCount(overview.high_potential)}`,
+    commentCollectionLine(overview),
+    `证据来源: ${overview.comments_collected
+      ? '已采集评论正文，证据同时来自评论、字幕/文案/转写与视频分析。'
+      : COMMENTS_MISSING}`,
+  ];
+  return section('1. Research Overview 研究概览', lines.join('\n'));
 }
 
 function sectionAudience(audience: ReportAudienceNarrative | undefined): string {
-  const lines = ['3. Target Audience 目标受众'];
   const segments = audience?.segments ?? [];
   const narrative = [
     textOrNull(audience?.primary),
@@ -233,43 +248,47 @@ function sectionAudience(audience: ReportAudienceNarrative | undefined): string 
     textOrNull(audience?.why_watch),
   ].filter(Boolean);
   if (!narrative.length && segments.length === 0) {
-    lines.push(empty('没有受众叙述，audience_insights 中也没有 status=active 的 audience_segment。'));
-    return lines.join('\n');
+    return section('3. Target Audience 目标受众', empty('没有受众叙述，audience_insights 中也没有 status=active 的 audience_segment。'));
   }
-  lines.push(`Primary 主要人群: ${show(audience?.primary)}`);
-  lines.push(`Secondary 次级人群: ${show(audience?.secondary)}`);
-  lines.push(`State 所处状态: ${show(audience?.state)}`);
-  lines.push(`Why Watch 为何观看: ${show(audience?.why_watch)}`);
+  const lines = [
+    `Primary 主要人群: ${show(audience?.primary)}`,
+    `Secondary 次级人群: ${show(audience?.secondary)}`,
+    `State 所处状态: ${show(audience?.state)}`,
+    `Why Watch 为何观看: ${show(audience?.why_watch)}`,
+  ];
   if (!narrative.length) {
     lines.push('受众叙述未生成（模型未返回，或报告 status 为 partial）。下面是数据库中的受众分段。');
   }
-  if (segments.length === 0) {
-    lines.push('Audience Segments 受众分段:');
-    lines.push(empty('audience_insights 中没有 status=active 的 audience_segment。'));
-  } else {
-    lines.push('Audience Segments 受众分段:');
-    lines.push(segments.map(formatInsight).join('\n\n'));
-  }
-  return lines.join('\n');
+  lines.push('Audience Segments 受众分段:');
+  lines.push(segments.length === 0
+    ? empty('audience_insights 中没有 status=active 的 audience_segment。')
+    : segments.map(formatInsight).join('\n\n'));
+  return section('3. Target Audience 目标受众', lines.join('\n'));
 }
 
-function sectionNeeds(needs: ReportInsight[] | undefined): string {
-  const lines = ['6. Needs 需求'];
+function sectionNeedsAndDesires(needs: ReportInsight[] | undefined, desires: ReportInsight[] | undefined): string {
   const items = needs ?? [];
-  if (items.length === 0) {
-    lines.push(empty('audience_insights 中没有 status=active 的 need（含 functional 与 emotional）。'));
-    return lines.join('\n');
-  }
   const functional = items.filter((item) => normalizeKind(item.need_kind) === 'functional');
   const emotional = items.filter((item) => normalizeKind(item.need_kind) === 'emotional');
   const other = items.filter((item) => {
     const kind = normalizeKind(item.need_kind);
     return kind !== 'functional' && kind !== 'emotional';
   });
-  lines.push(needGroup('Functional 功能需求', functional, '没有 need_kind=functional 的需求。'));
-  lines.push(needGroup('Emotional 心理需求', emotional, '没有 need_kind=emotional 的需求。'));
-  if (other.length) lines.push(needGroup('Other 未分类需求', other, ''));
-  return lines.join('\n');
+  const needBody = items.length === 0
+    ? empty('audience_insights 中没有 status=active 的 need（含 functional 与 emotional）。')
+    : [
+      needGroup('Functional 功能', functional, '没有 need_kind=functional 的需求。'),
+      needGroup('Emotional 心理', emotional, '没有 need_kind=emotional 的需求。'),
+      other.length ? needGroup('Other 未分类', other, '') : '',
+    ].filter(Boolean).join('\n\n');
+  const desireList = desires ?? [];
+  const desireBody = desireList.length === 0
+    ? empty('audience_insights 中没有 status=active 的 desire。')
+    : desireList.map(formatInsight).join('\n\n');
+  return section(
+    '5. Needs & Desires 需求与欲望',
+    `需求 Needs（功能/心理）\n${needBody}\n\n欲望 Desires\n${desireBody}`,
+  );
 }
 
 function needGroup(title: string, items: ReportInsight[], emptyReason: string): string {
@@ -309,14 +328,12 @@ function formatInsight(item: ReportInsight): string {
 }
 
 function sectionPatterns(patterns: ReportViralPatterns | undefined, analysed: number): string {
-  const lines = ['12. Viral Content Patterns 爆款内容模式'];
   const hooks = patterns?.top_hooks ?? [];
   const hasStats = PATTERN_BLOCKS.some((block) => ((patterns?.[block.key] as ReportPatternStat[] | undefined) ?? []).length > 0);
   if (!patterns || (!hasStats && hooks.length === 0)) {
-    lines.push(empty('本次运行没有 status=complete 且 is_latest 的视频分析，无法统计爆款模式。'));
-    return lines.join('\n');
+    return section('11. Viral Content Patterns 爆款内容模式', empty('本次运行没有 status=complete 且 is_latest 的视频分析，无法统计爆款模式。'));
   }
-  lines.push(`占比分母：已深度分析视频 ${fmtCount(analysed)}。百分比 = 该 key 的次数 / 已深度分析视频数。只统计该维度非空的分析。`);
+  const lines = [`占比分母：已深度分析视频 ${fmtCount(analysed)}。百分比 = 该 key 的次数 / 已深度分析视频数。只统计该维度非空的分析。`];
   for (const block of PATTERN_BLOCKS) {
     const stats = (patterns[block.key] as ReportPatternStat[] | undefined) ?? [];
     lines.push('');
@@ -335,17 +352,17 @@ function sectionPatterns(patterns: ReportViralPatterns | undefined, analysed: nu
     lines.push(empty('已完成分析中没有 hook 文本，或无法按 viral score 排序。'));
   } else {
     hooks.forEach((hook, index) => {
-      lines.push(`${index + 1}. Viral Score ${fmtScore(hook.viral_score)} | ${hook.url || '（无视频 URL）'}`);
-      lines.push(`   ${hook.hook}`);
+      lines.push(`[${index + 1}] Viral Score ${fmtScore(hook.viral_score)} | ${hook.url || '（无视频 URL）'}`);
+      lines.push(`    ${hook.hook}`);
     });
   }
-  return lines.join('\n');
+  return section('11. Viral Content Patterns 爆款内容模式', lines.join('\n'));
 }
 
 function sectionWhy(items: ReportWhy[] | undefined): string {
   const list = items ?? [];
   if (list.length === 0) {
-    return section('13. Why Content Works 内容为何有效', empty('没有同时具备已完成分析、且填写了 why_it_works 或 reusable_pattern 的视频。'));
+    return section('12. Why These Videos Work 这些视频为何有效', empty('没有同时具备已完成分析、且填写了 why_it_works 或 reusable_pattern 的视频。'));
   }
   const body = list.map((item, index) => [
     `[${index + 1}] Viral Score 爆款分: ${fmtScore(item.viral_score)}`,
@@ -354,14 +371,14 @@ function sectionWhy(items: ReportWhy[] | undefined): string {
     `Why it works 为何有效: ${show(item.why_it_works)}`,
     `Reusable pattern 可复用模式: ${show(item.reusable_pattern)}`,
   ].join('\n')).join('\n\n');
-  return section('13. Why Content Works 内容为何有效', body);
+  return section('12. Why These Videos Work 这些视频为何有效', body);
 }
 
 function sectionOpportunities(items: ReportOpportunity[] | undefined): string {
   const list = items ?? [];
   if (list.length === 0) {
     return section(
-      '15. Content Opportunities 内容机会',
+      '14. Content Opportunities 内容机会',
       empty('该赛道没有 status=active 的机会；或证据视频与本次运行无交集，且赛道下没有其他 active 机会。'),
     );
   }
@@ -390,13 +407,13 @@ function sectionOpportunities(items: ReportOpportunity[] | undefined): string {
       `Platform 平台建议: ${show(item.platform_suggestion)}`,
     ].join('\n');
   }).join('\n\n');
-  return section('15. Content Opportunities 内容机会', body);
+  return section('14. Content Opportunities 内容机会', body);
 }
 
 function sectionSources(items: ReportSourceVideo[] | undefined): string {
   const list = items ?? [];
   if (list.length === 0) {
-    return section('16. Source Videos 来源视频', empty('本次 research run 没有关联视频（research_run_videos 为空）。'));
+    return section('15. Source Videos 来源视频', empty('本次 research run 没有关联视频（research_run_videos 为空）。'));
   }
   const body = list.map((item, index) => [
     `[${index + 1}]`,
@@ -411,7 +428,7 @@ function sectionSources(items: ReportSourceVideo[] | undefined): string {
     `Viral Score 爆款分: ${fmtScore(item.viral_score)}`,
     `AI Summary 分析摘要: ${show(item.summary)}`,
   ].join('\n')).join('\n\n');
-  return section('16. Source Videos 来源视频', body);
+  return section('15. Source Videos 来源视频', body);
 }
 
 function commentCollectionLine(overview: ReportOverview): string {
@@ -432,7 +449,15 @@ function formatTopComments(comments: ReportCommentSnippet[] | undefined): string
 }
 
 function section(heading: string, body: string): string {
-  return `${heading}\n${body}`;
+  return `${heading}\n${guardNumberedLines(body)}`;
+}
+
+function guardNumberedLines(text: string): string {
+  return text.split('\n').map((line) => {
+    const match = line.match(/^(\s*)(\d+)\.\s(.*)$/);
+    if (!match) return line;
+    return `${match[1]}[${match[2]}] ${match[3]}`;
+  }).join('\n');
 }
 
 function empty(reason: string): string {
