@@ -9,26 +9,16 @@ import { useProject } from './ProjectProvider';
 
 interface NavItem {
   href: string;
-  labelKey?: 'nav.dashboard' | 'nav.research' | 'nav.feed' | 'nav.insights';
-  label?: string;
+  labelKey: 'nav.home' | 'nav.niches' | 'nav.library' | 'nav.aiIntelligence' | 'nav.opportunities' | 'nav.researchTasks';
 }
 
-const NAV: Array<{ labelKey: '' | 'nav.intelligence'; items: NavItem[] }> = [
-  {
-    labelKey: '',
-    items: [
-      { href: '/', labelKey: 'nav.dashboard' },
-      { href: '/library', label: '爆款库' },
-    ],
-  },
-  {
-    labelKey: 'nav.intelligence' as const,
-    items: [
-      { href: '/research', labelKey: 'nav.research' as const },
-      { href: '/feed', labelKey: 'nav.feed' as const },
-      { href: '/insights', labelKey: 'nav.insights' as const },
-    ],
-  },
+const NAV: NavItem[] = [
+  { href: '/', labelKey: 'nav.home' },
+  { href: '/niches', labelKey: 'nav.niches' },
+  { href: '/library', labelKey: 'nav.library' },
+  { href: '/intelligence', labelKey: 'nav.aiIntelligence' },
+  { href: '/opportunities', labelKey: 'nav.opportunities' },
+  { href: '/research', labelKey: 'nav.researchTasks' },
 ];
 
 interface SidebarProps {
@@ -77,30 +67,21 @@ export default function Sidebar({ userEmail = '', authMode = 'open', open = fals
         <ProjectSwitcher />
       </div>
       <div className="flex-1 space-y-5 overflow-y-auto px-3">
-        {NAV.map((section) => (
-          <div key={section.labelKey || 'root'}>
-            {section.labelKey ? (
-              <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[1.5px] text-muted">
-                {t(section.labelKey)}
-              </div>
-            ) : null}
-            <div className="flex flex-col gap-0.5">
-              {section.items.map((item) => {
-                const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                return (
-                  <Link
-                    key={item.href}
-                    href={hrefFor(item.href)}
-                    onClick={onNavigate}
-                    className={`rounded-lg px-3 py-2 text-[13px] font-medium ${active ? 'nav-active' : 'nav-idle'}`}
-                  >
-                    {item.label || (item.labelKey ? t(item.labelKey) : item.href)}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <div className="flex flex-col gap-0.5">
+          {NAV.map((item) => {
+            const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={hrefFor(item.href)}
+                onClick={onNavigate}
+                className={`rounded-lg px-3 py-2 text-[13px] font-medium ${active ? 'nav-active' : 'nav-idle'}`}
+              >
+                {t(item.labelKey)}
+              </Link>
+            );
+          })}
+        </div>
       </div>
       <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border)' }}>
         <div className="truncate text-[12px]" style={{ color: 'var(--text-secondary)' }} title={userEmail}>
