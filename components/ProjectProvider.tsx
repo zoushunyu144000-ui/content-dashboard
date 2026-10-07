@@ -17,6 +17,7 @@ interface ProjectState {
   loading: boolean;
   error: string;
   setProjectId: (id: string) => void;
+  refresh: () => Promise<ProjectOption[]>;
 }
 
 const STORAGE_KEY = 'ci.project';
@@ -85,6 +86,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
+  const refresh = useCallback(async () => {
+    const data = await api<{ projects: ProjectOption[] }>('/api/projects');
+    const list = data.projects || [];
+    setProjects(list);
+    return list;
+  }, []);
+
   const setProjectId = useCallback((id: string) => {
     setProjectIdState(id);
     window.localStorage.setItem(STORAGE_KEY, id);
@@ -100,8 +108,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ projects, project, loading, error, setProjectId }),
-    [projects, project, loading, error, setProjectId],
+    () => ({ projects, project, loading, error, setProjectId, refresh }),
+    [projects, project, loading, error, setProjectId, refresh],
   );
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

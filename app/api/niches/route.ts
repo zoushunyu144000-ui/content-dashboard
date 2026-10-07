@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/require-user';
-import { listNiches, NicheInputError, NicheNotFoundError, updateNiche } from '@/lib/research/niches';
+import {
+  createNiche,
+  listNiches,
+  NicheConflictError,
+  NicheInputError,
+  NicheNotFoundError,
+  updateNiche,
+} from '@/lib/research/niches';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +22,26 @@ export async function GET() {
   } catch (err) {
     console.error('[niches] list failed', err);
     return NextResponse.json({ error: 'Could not load niches' }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (auth instanceof NextResponse) return auth;
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+  try {
+    const niche = await createNiche(body);
+    return NextResponse.json({ niche }, { status: 201 });
+  } catch (err) {
+    if (err instanceof NicheInputError) return NextResponse.json({ error: err.message }, { status: 400 });
+    if (err instanceof NicheConflictError) return NextResponse.json({ error: err.message }, { status: 409 });
+    console.error('[niches] create failed', err);
+    return NextResponse.json({ error: 'Could not create niche' }, { status: 500 });
   }
 }
 

@@ -1,5 +1,6 @@
 import 'server-only';
 import { getDb } from '@/lib/db';
+import { PAIN_POINT_CATEGORY_LABELS } from '@/lib/research/taxonomy';
 
 export class NicheInputError extends Error {
   constructor(message: string) {
@@ -12,6 +13,13 @@ export class NicheNotFoundError extends Error {
   constructor() {
     super('Niche was not found');
     this.name = 'NicheNotFoundError';
+  }
+}
+
+export class NicheConflictError extends Error {
+  constructor() {
+    super('A niche with this slug already exists');
+    this.name = 'NicheConflictError';
   }
 }
 
@@ -178,4 +186,208 @@ export async function updateNiche(id: string, body: Record<string, unknown>): Pr
   `;
   if (!rows[0]) throw new NicheNotFoundError();
   return toProfile(rows[0]);
+}
+
+function slugFromName(name: string): string {
+  const ascii = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  if (ascii) return ascii;
+  // Names without ASCII (typical Simplified Chinese) still need a stable slug so the
+  // same name conflicts and a different name does not.
+  let hash = 2166136261;
+  for (let i = 0; i < name.length; i += 1) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `n-${(hash >>> 0).toString(36)}`;
+}
+
+function readPlatforms(body: Record<string, unknown>): string[] {
+  if (!Object.prototype.hasOwnProperty.call(body, 'platforms') || body.platforms == null) return ['tiktok'];
+  const raw = body.platforms;
+  if (!Array.isArray(raw)) throw new NicheInputError('platforms must be an array of strings');
+  const value: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') throw new NicheInputError('platforms must be an array of strings');
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    value.push(trimmed.slice(0, 40));
+  }
+  if (value.length > 10) throw new NicheInputError('platforms has too many items');
+  return value.length ? value : ['tiktok'];
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === '23505';
+}
+
+export async function createNiche(body: Record<string, unknown>): Promise<NicheProfile> {
+  if (!Object.prototype.hasOwnProperty.call(body, 'name')) throw new NicheInputError('name is required');
+  const name = readText(body, 'name').value;
+  if (!name) throw new NicheInputError('name is required');
+  const targetAudience = Object.prototype.hasOwnProperty.call(body, 'target_audience')
+    ? readText(body, 'target_audience').value
+    : null;
+  const coreBusiness = Object.prototype.hasOwnProperty.call(body, 'core_business')
+    ? readText(body, 'core_business').value
+    : null;
+  const contentGoal = Object.prototype.hasOwnProperty.call(body, 'content_goal')
+    ? readText(body, 'content_goal').value
+    : null;
+  const painPoints = Object.prototype.hasOwnProperty.call(body, 'core_pain_points')
+    ? readList(body, 'core_pain_points').value
+    : [];
+  const pillars = Object.prototype.hasOwnProperty.call(body, 'content_pillars')
+    ? readList(body, 'content_pillars').value
+    : [];
+  const keywords = Object.prototype.hasOwnProperty.call(body, 'search_keywords')
+    ? readList(body, 'search_keywords').value
+    : [];
+  const platforms = readPlatforms(body);
+  const slug = slugFromName(name);
+  const sql = getDb();
+  try {
+    const rows = await sql<NicheRow[]>`
+      insert into projects (
+        slug, name, niche, audience, platforms,
+        target_audience, core_business, content_goal,
+        core_pain_points, content_pillars, search_keywords
+      ) values (
+        ${slug},
+        ${name},
+        ${coreBusiness},
+        ${targetAudience},
+        ${sql.array(platforms, 1009)},
+        ${targetAudience},
+        ${coreBusiness},
+        ${contentGoal},
+        ${sql.array(painPoints, 1009)},
+        ${sql.array(pillars, 1009)},
+        ${sql.array(keywords, 1009)}
+      )
+      returning id, slug, name, description, niche, audience, voice, platforms, default_language,
+                target_audience, core_business, content_goal, core_pain_points, content_pillars, search_keywords,
+                created_at, updated_at, archived_at
+    `;
+    if (!rows[0]) throw new Error('Insert returned no row');
+    return toProfile(rows[0]);
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new NicheConflictError();
+    throw err;
+  }
+}
+
+export interface NicheOverview {
+  niche: NicheProfile;
+  counts: {
+    videos: number;
+    analysed: number;
+    opportunities: number;
+  };
+  top_pain_points: Array<{ key: string; label: string; count: number }>;
+  audience_insights: Array<{ title: string; evidence_count: number; confidence: string | null }>;
+  opportunities: Array<{ id: string; title: string }>;
+  runs: Array<{ id: string; topic: string; status: string; created_at: string }>;
+}
+
+function asCount(value: number | string | null | undefined): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function asIso(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+}
+
+const PAIN_LABELS: Record<string, string> = PAIN_POINT_CATEGORY_LABELS;
+
+export async function getNicheOverview(id: string): Promise<NicheOverview | null> {
+  const niche = await getNiche(id);
+  if (!niche) return null;
+  const sql = getDb();
+  const [videoRows, analysedRows, opportunityCountRows, painRows, insightRows, opportunityRows, runRows] = await Promise.all([
+    sql<{ n: number }[]>`
+      select count(distinct rv.video_id)::int as n
+      from research_run_videos rv
+      join research_runs r on r.id = rv.run_id
+      where r.project_id = ${id}
+    `,
+    sql<{ n: number }[]>`
+      select count(*)::int as n
+      from video_analyses
+      where niche_id = ${id}
+        and is_latest = true
+        and status = 'complete'
+    `,
+    sql<{ n: number }[]>`
+      select count(*)::int as n
+      from opportunities
+      where niche_id = ${id} and status = 'active'
+    `,
+    sql<{ key: string; count: number }[]>`
+      select pain_point_category as key, count(*)::int as count
+      from video_analyses
+      where niche_id = ${id}
+        and is_latest = true
+        and status = 'complete'
+        and pain_point_category is not null
+        and pain_point_category <> ''
+      group by pain_point_category
+      order by count desc, pain_point_category
+      limit 5
+    `,
+    sql<{ title: string; evidence_count: number | null; confidence: string | null }[]>`
+      select ai.title, ai.evidence_count, ai.confidence
+      from audience_insights ai
+      join research_runs r on r.id = ai.run_id and r.project_id = ${id}
+      where ai.category = 'pain_point'
+        and ai.status = 'active'
+      order by ai.evidence_count desc nulls last, ai.created_at desc nulls last
+      limit 5
+    `,
+    sql<{ id: string; title: string }[]>`
+      select id, title
+      from opportunities
+      where niche_id = ${id} and status = 'active'
+      order by coalesce((evidence->>'matching_videos')::numeric, 0) desc, created_at desc
+      limit 3
+    `,
+    sql<{ id: string; topic: string; status: string; created_at: Date | string }[]>`
+      select id, topic, status, created_at
+      from research_runs
+      where project_id = ${id}
+      order by created_at desc
+      limit 5
+    `,
+  ]);
+
+  return {
+    niche,
+    counts: {
+      videos: asCount(videoRows[0]?.n),
+      analysed: asCount(analysedRows[0]?.n),
+      opportunities: asCount(opportunityCountRows[0]?.n),
+    },
+    top_pain_points: painRows.map((row) => ({
+      key: row.key,
+      label: PAIN_LABELS[row.key] || row.key,
+      count: asCount(row.count),
+    })),
+    audience_insights: insightRows.map((row) => ({
+      title: row.title,
+      evidence_count: asCount(row.evidence_count),
+      confidence: row.confidence,
+    })),
+    opportunities: opportunityRows.map((row) => ({ id: row.id, title: row.title })),
+    runs: runRows.map((row) => ({
+      id: row.id,
+      topic: row.topic,
+      status: row.status,
+      created_at: asIso(row.created_at),
+    })),
+  };
 }
