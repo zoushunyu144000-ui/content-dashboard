@@ -213,7 +213,7 @@ create table if not exists intelligence_reports (
   level text not null check (level in ('run', 'niche')),
   niche_id uuid not null references projects(id) on delete cascade,
   run_id uuid references research_runs(id) on delete set null,
-  window text not null check (window in ('run', '7d', '30d', 'all')),
+  time_window text not null check (time_window in ('run', '7d', '30d', 'all')),
   video_count integer,
   analyzed_count integer,
   frequencies jsonb,
@@ -227,6 +227,6 @@ create table if not exists intelligence_reports (
   created_at timestamptz not null default now()
 );
 create index if not exists intelligence_reports_niche_level_window_idx
-  on intelligence_reports (niche_id, level, window, created_at desc);
+  on intelligence_reports (niche_id, level, time_window, created_at desc);
 create index if not exists intelligence_reports_run_idx on intelligence_reports (run_id);
 `;
