@@ -57,7 +57,7 @@ const ITEM_SCHEMA: JsonSchema = {
     desired_outcome: { type: 'string', description: '想要的结果。不适用则空字符串' },
     need_kind: {
       type: 'string',
-      enum: ['', 'functional', 'emotional'],
+      enum: ['none', 'functional', 'emotional'],
       description: 'need 用 functional 或 emotional；其他类别用空字符串',
     },
     video_ids: {
@@ -115,7 +115,7 @@ confidence 只能是 high、medium、low，并且要和证据强度一致。
 
 pain_point 必须写清链条 surface_problem → underlying_problem → underlying_need → desired_outcome。
 例：客户总在 WhatsApp 问价格 → 老板每天重复回答相同问题，沟通时间成本高 → 希望客户联系前就完成基本信息获取和筛选 → 减少无效沟通，同时显得更专业。
-need 的 need_kind 只能是 functional（功能）或 emotional（心理）。其他类别的 need_kind 用空字符串。
+need 的 need_kind 只能是 functional（功能）或 emotional（心理）。其他类别的 need_kind 用 none。
 content_gap 是数据里已经出现、但现有高表现视频没有好好满足的受众需求。
 comments_collected 为 false 或某条视频的 comment_texts 为 null 时，评论原文没有采集，不要假装看过评论。
 niche 只用于用词，不能当作证据。
