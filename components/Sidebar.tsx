@@ -7,11 +7,18 @@ import { t } from '@/lib/i18n';
 import ProjectSwitcher from './ProjectSwitcher';
 import { useProject } from './ProjectProvider';
 
-const NAV = [
+interface NavItem {
+  href: string;
+  labelKey?: 'nav.dashboard' | 'nav.research' | 'nav.feed' | 'nav.insights';
+  label?: string;
+}
+
+const NAV: Array<{ labelKey: '' | 'nav.intelligence'; items: NavItem[] }> = [
   {
-    labelKey: '' as const,
+    labelKey: '',
     items: [
-      { href: '/', labelKey: 'nav.dashboard' as const },
+      { href: '/', labelKey: 'nav.dashboard' },
+      { href: '/library', label: '爆款库' },
     ],
   },
   {
@@ -87,7 +94,7 @@ export default function Sidebar({ userEmail = '', authMode = 'open', open = fals
                     onClick={onNavigate}
                     className={`rounded-lg px-3 py-2 text-[13px] font-medium ${active ? 'nav-active' : 'nav-idle'}`}
                   >
-                    {t(item.labelKey)}
+                    {item.label || (item.labelKey ? t(item.labelKey) : item.href)}
                   </Link>
                 );
               })}
