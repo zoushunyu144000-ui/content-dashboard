@@ -244,7 +244,7 @@ class OpenAICompatibleProvider implements AIProvider {
 
 export function getAIProvider(tier: 'default' | 'intel' = 'default'): AIProvider {
   const env = getServerEnv();
-  const model = tier === 'intel' ? (process.env.AI_MODEL_INTEL?.trim() || env.aiModel) : env.aiModel;
+  const model: string = (tier === 'intel' ? process.env.AI_MODEL_INTEL?.trim() || env.aiModel : env.aiModel) || '';
   if ((env.aiProvider || 'openai-compatible') !== 'openai-compatible') {
     throw new Error(`AI_PROVIDER "${env.aiProvider}" is not supported`);
   }
